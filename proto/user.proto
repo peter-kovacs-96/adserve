@@ -1,0 +1,46 @@
+syntax = "proto3";
+
+package io.adserve.user;
+
+option java_multiple_files = true;
+option java_package = "io.adserve.user.grpc";
+
+service UserService {
+  rpc GetUser(GetUserRequest) returns (GetUserResponse);
+}
+
+message GetUserRequest {
+  string user_id = 1;
+  string trace_id = 2;
+  string request_id = 3;
+}
+
+message GetUserResponse {
+  User user = 1;
+  string trace_id = 2;
+  string request_id = 3;
+}
+
+message User {
+  string user_id = 1;
+  string name = 2;
+  string email = 3;
+  DeviceInfo device = 4;
+  Demographics demographics = 5;
+  int64 created_at = 6;
+  int64 last_seen_at = 7;
+}
+
+message DeviceInfo {
+  string device_type = 1;
+  string os = 2;
+  string browser = 3;
+}
+
+message Demographics {
+  string country = 1;
+  string region = 2;
+  string language = 3;
+  int32 age_range_start = 4;
+  int32 age_range_end = 5;
+}

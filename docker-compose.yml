@@ -1,0 +1,181 @@
+services:
+  ad-orchestration:
+    build:
+      context: ./ad-orchestration
+      dockerfile: Dockerfile
+    image: adserve/ad-orchestration:latest
+    container_name: ad-orchestration
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_APPLICATION_NAME=ad-orchestration
+      - SERVER_PORT=8080
+      - GRPC_CLIENT_USER_SERVICE_ADDRESS=user-service:9090
+      - GRPC_CLIENT_SEGMENT_SERVICE_ADDRESS=segment-service:9091
+      - GRPC_CLIENT_TARGETING_SERVICE_ADDRESS=targeting-service:9092
+      - HTTP_CLIENT_ML_INFERENCE_BASE_URL=http://ml-inference:8081
+      - HTTP_CLIENT_PARTNER_BASE_URL=http://partner-simulator:8082
+      - LOGGING_LEVEL_IO_ADSERVE=INFO
+    depends_on:
+      user-service:
+        condition: service_healthy
+      segment-service:
+        condition: service_healthy
+      targeting-service:
+        condition: service_healthy
+      ml-inference:
+        condition: service_healthy
+      partner-simulator:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - adserve-network
+    deploy:
+      resources:
+        limits:
+          memory: 768M
+        reservations:
+          memory: 512M
+
+  user-service:
+    build:
+      context: ./user-service
+      dockerfile: Dockerfile
+    image: adserve/user-service:latest
+    container_name: user-service
+    environment:
+      - SPRING_APPLICATION_NAME=user-service
+      - SERVER_PORT=9001
+      - GRPC_SERVER_PORT=9090
+      - LOGGING_LEVEL_IO_ADSERVE=INFO
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9001/actuator/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - adserve-network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+  segment-service:
+    build:
+      context: ./segment-service
+      dockerfile: Dockerfile
+    image: adserve/segment-service:latest
+    container_name: segment-service
+    environment:
+      - SPRING_APPLICATION_NAME=segment-service
+      - SERVER_PORT=9002
+      - GRPC_SERVER_PORT=9091
+      - LOGGING_LEVEL_IO_ADSERVE=INFO
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9002/actuator/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - adserve-network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+  targeting-service:
+    build:
+      context: ./targeting-service
+      dockerfile: Dockerfile
+    image: adserve/targeting-service:latest
+    container_name: targeting-service
+    environment:
+      - SPRING_APPLICATION_NAME=targeting-service
+      - SERVER_PORT=9003
+      - GRPC_SERVER_PORT=9092
+      - LOGGING_LEVEL_IO_ADSERVE=INFO
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9003/actuator/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - adserve-network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+  ml-inference:
+    build:
+      context: ./ml-inference
+      dockerfile: Dockerfile
+    image: adserve/ml-inference:latest
+    container_name: ml-inference
+    environment:
+      - SPRING_APPLICATION_NAME=ml-inference
+      - SERVER_PORT=8081
+      - LOGGING_LEVEL_IO_ADSERVE=INFO
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8081/actuator/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - adserve-network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+  partner-simulator:
+    build:
+      context: ./partner-simulator
+      dockerfile: Dockerfile
+    image: adserve/partner-simulator:latest
+    container_name: partner-simulator
+    environment:
+      - SPRING_APPLICATION_NAME=partner-simulator
+      - SERVER_PORT=8082
+      - LOGGING_LEVEL_IO_ADSERVE=INFO
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8082/actuator/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - adserve-network
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+
+networks:
+  adserve-network:
+    driver: bridge

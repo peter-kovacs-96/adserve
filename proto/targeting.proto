@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package io.adserve.targeting;
+
+option java_multiple_files = true;
+option java_package = "io.adserve.targeting.grpc";
+
+service TargetingService {
+  rpc GetTargetingRules(GetTargetingRulesRequest) returns (GetTargetingRulesResponse);
+}
+
+message GetTargetingRulesRequest {
+  string user_id = 1;
+  repeated string segment_ids = 2;
+  string trace_id = 3;
+  string request_id = 4;
+}
+
+message GetTargetingRulesResponse {
+  repeated TargetingRule rules = 1;
+  string trace_id = 2;
+  string request_id = 3;
+}
+
+message TargetingRule {
+  string id = 1;
+  string name = 2;
+  int32 priority = 3;
+  repeated Criteria criteria = 4;
+  repeated string eligible_partners = 5;
+}
+
+message Criteria {
+  string field = 1;
+  Operator operator = 2;
+  string value = 3;
+}
+
+enum Operator {
+  OPERATOR_UNSPECIFIED = 0;
+  EQUALS = 1;
+  NOT_EQUALS = 2;
+  CONTAINS = 3;
+  IN = 4;
+  GREATER_THAN = 5;
+  LESS_THAN = 6;
+}

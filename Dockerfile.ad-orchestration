@@ -1,0 +1,59 @@
+# Multi-stage build for ad-orchestration
+# Build from root: docker build -f Dockerfile.ad-orchestration -t adserve/ad-orchestration:latest .
+
+# Stage 1: Build
+FROM eclipse-temurin:25-jdk-alpine AS builder
+
+WORKDIR /build
+
+# Copy Gradle wrapper
+COPY gradlew .
+COPY gradle ./gradle
+RUN chmod +x gradlew
+
+# Copy build files
+COPY build.gradle.kts .
+COPY settings.gradle.kts .
+
+# Copy proto files
+COPY proto ./proto
+
+# Copy module
+COPY ad-orchestration ./ad-orchestration
+
+# Build (skip tests for faster build)
+RUN ./gradlew :ad-orchestration:bootJar --no-daemon -x test
+
+# Stage 2: Runtime
+FROM eclipse-temurin:25-jre-alpine
+
+# Create non-root user
+RUN addgroup -g 1000 adserve && \
+    adduser -u 1000 -G adserve -D -h /app adserve
+
+WORKDIR /app
+
+# Copy JAR from builder
+COPY --from=builder /build/ad-orchestration/build/libs/*.jar app.jar
+
+# Change ownership
+RUN chown -R adserve:adserve /app
+
+# Switch to non-root user
+USER adserve
+
+# Expose port
+EXPOSE 8080
+
+# JVM settings with preview features enabled
+ENV JAVA_OPTS="-Xms4g -Xmx4g \
+    -XX:+UseZGC \
+    -XX:+ZGenerational \
+    --enable-preview \
+    -Djava.security.egd=file:/dev/./urandom"
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=60s --retries=3 \
+    CMD wget -qO- http://localhost:8080/actuator/health || exit 1
+
+ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]

@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package io.adserve.segment;
+
+option java_multiple_files = true;
+option java_package = "io.adserve.segment.grpc";
+
+service SegmentService {
+  rpc GetSegments(GetSegmentsRequest) returns (GetSegmentsResponse);
+}
+
+message GetSegmentsRequest {
+  string user_id = 1;
+  string trace_id = 2;
+  string request_id = 3;
+}
+
+message GetSegmentsResponse {
+  repeated Segment segments = 1;
+  string trace_id = 2;
+  string request_id = 3;
+}
+
+message Segment {
+  string id = 1;
+  string name = 2;
+  SegmentType type = 3;
+  double score = 4;
+  int64 timestamp = 5;
+}
+
+enum SegmentType {
+  SEGMENT_TYPE_UNSPECIFIED = 0;
+  BEHAVIORAL = 1;
+  DEMOGRAPHIC = 2;
+  CONTEXTUAL = 3;
+  INTEREST = 4;
+  CUSTOM = 5;
+}
