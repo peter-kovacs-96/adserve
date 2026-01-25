@@ -1,0 +1,126 @@
+# Prometheus configuration for AdServe platform
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: adserve
+    environment: docker
+
+scrape_configs:
+  # Prometheus self-monitoring
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          app: prometheus
+          service: prometheus
+          environment: docker
+
+  # AdServe Application Services
+  - job_name: 'ad-orchestration'
+    metrics_path: /actuator/prometheus
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    honor_labels: true
+    static_configs:
+      - targets: ['ad-orchestration:8080']
+        labels:
+          app: adserve
+          service: ad-orchestration
+          environment: docker
+          tier: api-gateway
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        regex: '([^:]+):\d+'
+        replacement: '${1}'
+
+  - job_name: 'user-service'
+    metrics_path: /actuator/prometheus
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    honor_labels: true
+    static_configs:
+      - targets: ['user-service:9001']
+        labels:
+          app: adserve
+          service: user-service
+          environment: docker
+          tier: backend
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        regex: '([^:]+):\d+'
+        replacement: '${1}'
+
+  - job_name: 'segment-service'
+    metrics_path: /actuator/prometheus
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    honor_labels: true
+    static_configs:
+      - targets: ['segment-service:9002']
+        labels:
+          app: adserve
+          service: segment-service
+          environment: docker
+          tier: backend
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        regex: '([^:]+):\d+'
+        replacement: '${1}'
+
+  - job_name: 'targeting-service'
+    metrics_path: /actuator/prometheus
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    honor_labels: true
+    static_configs:
+      - targets: ['targeting-service:9003']
+        labels:
+          app: adserve
+          service: targeting-service
+          environment: docker
+          tier: backend
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        regex: '([^:]+):\d+'
+        replacement: '${1}'
+
+  - job_name: 'ml-inference'
+    metrics_path: /actuator/prometheus
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    honor_labels: true
+    static_configs:
+      - targets: ['ml-inference:8081']
+        labels:
+          app: adserve
+          service: ml-inference
+          environment: docker
+          tier: ml
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        regex: '([^:]+):\d+'
+        replacement: '${1}'
+
+  - job_name: 'partner-simulator'
+    metrics_path: /actuator/prometheus
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    honor_labels: true
+    static_configs:
+      - targets: ['partner-simulator:8082']
+        labels:
+          app: adserve
+          service: partner-simulator
+          environment: docker
+          tier: external
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: instance
+        regex: '([^:]+):\d+'
+        replacement: '${1}'

@@ -8,7 +8,9 @@ val grpcVersion: String by rootProject.extra
 val protobufVersion: String by rootProject.extra
 
 dependencies {
+    implementation("org.springframework.boot:spring-boot-starter-web")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
+    implementation("io.micrometer:micrometer-registry-prometheus")
 
     // gRPC
     implementation("io.grpc:grpc-netty-shaded:$grpcVersion")
