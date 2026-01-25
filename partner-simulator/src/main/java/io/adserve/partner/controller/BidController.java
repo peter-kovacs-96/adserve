@@ -45,7 +45,7 @@ public class BidController {
         // Simulate network latency (20-80ms)
         simulateLatency();
 
-        // Generate random bid price ($1.50 - $3.50)
+        // Generate a random bid price ($1.50 - $3.50)
         var random = ThreadLocalRandom.current();
         var bidPrice = 1.50 + random.nextDouble(2.0);
         bidPrice = Math.round(bidPrice * 100.0) / 100.0;

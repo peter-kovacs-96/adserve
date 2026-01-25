@@ -18,12 +18,6 @@ public class HttpClientConfig {
     @Value("${http.client.partner.base-url:http://localhost:8082}")
     private String partnerBaseUrl;
 
-    @Value("${http.client.connect-timeout-ms:1000}")
-    private long connectTimeoutMs;
-
-    @Value("${http.client.read-timeout-ms:100}")
-    private long readTimeoutMs;
-
     @Bean
     public MlInferenceClient mlInferenceClient() {
         var restClient = RestClient.builder()

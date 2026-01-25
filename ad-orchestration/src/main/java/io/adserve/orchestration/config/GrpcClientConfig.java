@@ -24,8 +24,6 @@ public class GrpcClientConfig {
     @Value("${grpc.client.targeting-service.address:localhost:9092}")
     private String targetingServiceAddress;
 
-    @Value("${grpc.client.deadline-ms:10}")
-    private long deadlineMs;
 
     private ManagedChannel userChannel;
     private ManagedChannel segmentChannel;
