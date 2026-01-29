@@ -1,44 +1,45 @@
 package io.adserve.orchestration.config;
 
 import io.adserve.orchestration.client.MlInferenceClient;
-import io.adserve.orchestration.client.PartnerClient;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.support.RestClientAdapter;
 import org.springframework.web.service.invoker.HttpServiceProxyFactory;
 
+import java.net.http.HttpClient;
+import java.util.concurrent.Executors;
+
 @Configuration
+@EnableConfigurationProperties(HttpClientProperties.class)
 public class HttpClientConfig {
 
-    @Value("${http.client.ml-inference.base-url:http://localhost:8081}")
-    private String mlInferenceBaseUrl;
+    private final HttpClientProperties properties;
 
-    @Value("${http.client.partner.base-url:http://localhost:8082}")
-    private String partnerBaseUrl;
-
-    @Bean
-    public MlInferenceClient mlInferenceClient() {
-        var restClient = RestClient.builder()
-                .baseUrl(mlInferenceBaseUrl)
-                .build();
-
-        var adapter = RestClientAdapter.create(restClient);
-        var factory = HttpServiceProxyFactory.builderFor(adapter).build();
-
-        return factory.createClient(MlInferenceClient.class);
+    public HttpClientConfig(HttpClientProperties properties) {
+        this.properties = properties;
     }
 
     @Bean
-    public PartnerClient partnerClient() {
-        var restClient = RestClient.builder()
-                .baseUrl(partnerBaseUrl)
+    public MlInferenceClient mlInferenceClient() {
+        var httpClient = HttpClient.newBuilder()
+                .connectTimeout(properties.mlInference().connectTimeout())
+                .executor(Executors.newVirtualThreadPerTaskExecutor())
                 .build();
 
-        var adapter = RestClientAdapter.create(restClient);
-        var factory = HttpServiceProxyFactory.builderFor(adapter).build();
+        var requestFactory = new JdkClientHttpRequestFactory(httpClient);
+        requestFactory.setReadTimeout(properties.mlInference().readTimeout());
 
-        return factory.createClient(PartnerClient.class);
+        var restClient = RestClient.builder()
+                .baseUrl(properties.mlInference().baseUrl())
+                .requestFactory(requestFactory)
+                .build();
+
+        return HttpServiceProxyFactory
+                .builderFor(RestClientAdapter.create(restClient))
+                .build()
+                .createClient(MlInferenceClient.class);
     }
 }

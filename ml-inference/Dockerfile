@@ -19,6 +19,8 @@ EXPOSE 8081
 ENV JAVA_OPTS="-Xms256m -Xmx256m \
     -XX:+UseZGC \
     --enable-preview \
+    -Djdk.tracePinnedThreads=short \
+    -Xlog:gc*:stdout:time,level,tags \
     -Djava.security.egd=file:/dev/./urandom"
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=60s --retries=3 \

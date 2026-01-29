@@ -10,11 +10,20 @@ services:
     environment:
       - SPRING_APPLICATION_NAME=ad-orchestration
       - SERVER_PORT=8080
+      # gRPC clients
       - GRPC_CLIENT_USER_SERVICE_ADDRESS=user-service:9090
       - GRPC_CLIENT_SEGMENT_SERVICE_ADDRESS=segment-service:9091
       - GRPC_CLIENT_TARGETING_SERVICE_ADDRESS=targeting-service:9092
+      # HTTP clients (type-safe config)
       - HTTP_CLIENT_ML_INFERENCE_BASE_URL=http://ml-inference:8081
+      - HTTP_CLIENT_ML_INFERENCE_CONNECT_TIMEOUT=100ms
+      - HTTP_CLIENT_ML_INFERENCE_READ_TIMEOUT=50ms
       - HTTP_CLIENT_PARTNER_BASE_URL=http://partner-simulator:8082
+      - HTTP_CLIENT_PARTNER_CONNECT_TIMEOUT=100ms
+      - HTTP_CLIENT_PARTNER_READ_TIMEOUT=50ms
+      # Metrics
+      - METRICS_BUSINESS_ENABLED=true
+      - METRICS_BOTTLENECK_ENABLED=true
       - LOGGING_LEVEL_IO_ADSERVE=INFO
     depends_on:
       user-service:

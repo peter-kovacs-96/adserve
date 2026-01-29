@@ -24,6 +24,8 @@ EXPOSE 8080
 ENV JAVA_OPTS="-Xms512m -Xmx512m \
     -XX:+UseZGC \
     --enable-preview \
+    -Djdk.tracePinnedThreads=short \
+    -Xlog:gc*:stdout:time,level,tags \
     -Djava.security.egd=file:/dev/./urandom"
 
 # Health check

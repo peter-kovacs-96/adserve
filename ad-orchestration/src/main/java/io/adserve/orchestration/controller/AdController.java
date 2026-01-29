@@ -2,8 +2,11 @@ package io.adserve.orchestration.controller;
 
 import io.adserve.orchestration.client.MlInferenceClient;
 import io.adserve.orchestration.client.PartnerClient;
+import io.adserve.orchestration.metrics.BottleneckMetrics;
+import io.adserve.orchestration.metrics.BusinessMetrics;
 import io.adserve.segment.grpc.GetSegmentsRequest;
 import io.adserve.segment.grpc.GetSegmentsResponse;
+import io.adserve.segment.grpc.Segment;
 import io.adserve.segment.grpc.SegmentServiceGrpc;
 import io.adserve.targeting.grpc.GetTargetingRulesRequest;
 import io.adserve.targeting.grpc.GetTargetingRulesResponse;
@@ -11,9 +14,6 @@ import io.adserve.targeting.grpc.TargetingServiceGrpc;
 import io.adserve.user.grpc.GetUserRequest;
 import io.adserve.user.grpc.GetUserResponse;
 import io.adserve.user.grpc.UserServiceGrpc;
-import io.micrometer.core.instrument.Counter;
-import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.Timer;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -46,11 +46,8 @@ public class AdController {
     private final long partnerTimeoutMs;
 
     // Metrics
-    private final Counter requestsTotal;
-    private final Counter requestsSuccess;
-    private final Counter requestsError;
-    private final Timer requestDuration;
-    private final MeterRegistry meterRegistry;
+    private final BusinessMetrics businessMetrics;
+    private final BottleneckMetrics bottleneckMetrics;
 
     public AdController(
             UserServiceGrpc.UserServiceBlockingStub userServiceStub,
@@ -58,7 +55,8 @@ public class AdController {
             TargetingServiceGrpc.TargetingServiceBlockingStub targetingServiceStub,
             MlInferenceClient mlInferenceClient,
             PartnerClient partnerClient,
-            MeterRegistry meterRegistry,
+            BusinessMetrics businessMetrics,
+            BottleneckMetrics bottleneckMetrics,
             @Value("${grpc.client.deadline-ms:10}") long deadlineMs,
             @Value("${http.client.partner.timeout-ms:80}") long partnerTimeoutMs) {
         this.userServiceStub = userServiceStub;
@@ -66,26 +64,10 @@ public class AdController {
         this.targetingServiceStub = targetingServiceStub;
         this.mlInferenceClient = mlInferenceClient;
         this.partnerClient = partnerClient;
+        this.businessMetrics = businessMetrics;
+        this.bottleneckMetrics = bottleneckMetrics;
         this.deadlineMs = deadlineMs;
         this.partnerTimeoutMs = partnerTimeoutMs;
-        this.meterRegistry = meterRegistry;
-
-        // Initialize metrics
-        this.requestsTotal = Counter.builder("ad_requests_total")
-                .description("Total number of ad requests")
-                .register(meterRegistry);
-
-        this.requestsSuccess = Counter.builder("ad_requests_success")
-                .description("Number of successful ad requests")
-                .register(meterRegistry);
-
-        this.requestsError = Counter.builder("ad_requests_error")
-                .description("Number of failed ad requests")
-                .register(meterRegistry);
-
-        this.requestDuration = Timer.builder("ad_request_duration")
-                .description("Ad request duration")
-                .register(meterRegistry);
     }
 
     @PostMapping("/request")
@@ -95,10 +77,11 @@ public class AdController {
         var traceId = UUID.randomUUID().toString();
         var userId = (String) request.getOrDefault("userId", "unknown");
 
-        requestsTotal.increment();
+        businessMetrics.incrementRequestsTotal();
+        int activeCount = bottleneckMetrics.incrementActiveRequests();
 
-        log.info("[REQUEST] Ad request received | requestId={} | traceId={} | userId={}",
-                requestId, traceId, userId);
+        log.info("[REQUEST] Ad request received | requestId={} | traceId={} | userId={} | activeRequests={}",
+                requestId, traceId, userId, activeCount);
 
         try (var scope = StructuredTaskScope.open(
                 StructuredTaskScope.Joiner.awaitAllSuccessfulOrThrow(),
@@ -120,14 +103,19 @@ public class AdController {
             var segmentResponse = segmentTask.get();
             var targetingResponse = targetingTask.get();
 
-            var internalTimeMs = Duration.between(internalStart, Instant.now()).toMillis();
+            var internalDuration = Duration.between(internalStart, Instant.now());
+            var internalTimeMs = internalDuration.toMillis();
+            bottleneckMetrics.recordPhaseInternal(internalDuration);
             log.info("[INTERNAL] Completed | traceId={} | timeMs={} | segments={} | rules={}",
                     traceId, internalTimeMs, segmentResponse.getSegmentsCount(), targetingResponse.getRulesCount());
 
             // Call ML service (after internal services)
             var mlStart = Instant.now();
             var mlPrediction = callMlService(userId, traceId, segmentResponse);
-            var mlTimeMs = Duration.between(mlStart, Instant.now()).toMillis();
+            var mlDuration = Duration.between(mlStart, Instant.now());
+            var mlTimeMs = mlDuration.toMillis();
+            bottleneckMetrics.recordPhaseMl(mlDuration);
+            bottleneckMetrics.recordHttpMlCall(mlDuration);
             log.info("[ML] Completed | traceId={} | timeMs={} | ctr={} | cvr={}",
                     traceId, mlTimeMs, mlPrediction.get("ctr"), mlPrediction.get("cvr"));
 
@@ -135,75 +123,86 @@ public class AdController {
             var partnerStart = Instant.now();
             log.info("[PARTNERS] Starting parallel calls to {} partners | traceId={}", PARTNERS.size(), traceId);
             var auctionResult = callPartnersAndRunAuction(requestId, traceId);
-            var partnerTimeMs = Duration.between(partnerStart, Instant.now()).toMillis();
+            var partnerDuration = Duration.between(partnerStart, Instant.now());
+            var partnerTimeMs = partnerDuration.toMillis();
+            bottleneckMetrics.recordPhasePartner(partnerDuration);
 
             log.info("[AUCTION] Winner selected | traceId={} | winner={} | price=${} | bids={}/{}",
                     traceId, auctionResult.winnerId(), String.format("%.2f", auctionResult.winningPrice()),
                     auctionResult.bidsReceived(), auctionResult.partnersCalled());
 
             // Record winner metric
-            recordWinnerMetric(auctionResult.winnerId());
+            businessMetrics.recordAuctionWin(auctionResult.winnerId());
 
             var processingTimeMs = Duration.between(startTime, Instant.now()).toMillis();
-            requestDuration.record(Duration.ofMillis(processingTimeMs));
-            requestsSuccess.increment();
+            businessMetrics.recordRequestDuration(Duration.ofMillis(processingTimeMs));
+            businessMetrics.incrementRequestsSuccess();
+            bottleneckMetrics.decrementActiveRequests();
 
-            log.info("[RESPONSE] Request completed | requestId={} | traceId={} | totalMs={} | internalMs={} | mlMs={} | partnersMs={}",
-                    requestId, traceId, processingTimeMs, internalTimeMs, mlTimeMs, partnerTimeMs);
+            log.info("[RESPONSE] Request completed | requestId={} | traceId={} | totalMs={} | internalMs={} | mlMs={} | partnersMs={} | activeRequests={}",
+                    requestId, traceId, processingTimeMs, internalTimeMs, mlTimeMs, partnerTimeMs, bottleneckMetrics.getActiveRequests());
 
             return buildSuccessResponse(requestId, traceId, processingTimeMs,
                     userResponse, segmentResponse, targetingResponse, mlPrediction, auctionResult);
 
         } catch (Exception e) {
             var processingTimeMs = Duration.between(startTime, Instant.now()).toMillis();
-            requestDuration.record(Duration.ofMillis(processingTimeMs));
-            requestsError.increment();
+            businessMetrics.recordRequestDuration(Duration.ofMillis(processingTimeMs));
+            businessMetrics.incrementRequestsError();
+            bottleneckMetrics.decrementActiveRequests();
 
-            log.error("[ERROR] Request failed | requestId={} | traceId={} | timeMs={} | error={}",
-                    requestId, traceId, processingTimeMs, e.getMessage(), e);
+            log.error("[ERROR] Request failed | requestId={} | traceId={} | timeMs={} | error={} | activeRequests={}",
+                    requestId, traceId, processingTimeMs, e.getMessage(), bottleneckMetrics.getActiveRequests(), e);
 
             return buildErrorResponse(requestId, traceId, processingTimeMs, e.getMessage());
         }
     }
 
-    private void recordWinnerMetric(String partnerId) {
-        Counter.builder("ad_auction_wins")
-                .description("Number of auction wins per partner")
-                .tag("partner", partnerId)
-                .register(meterRegistry)
-                .increment();
-    }
-
     private GetUserResponse callUserService(String userId, String traceId, String requestId) {
-        var request = GetUserRequest.newBuilder()
-                .setUserId(userId)
-                .setTraceId(traceId)
-                .setRequestId(requestId)
-                .build();
-        return userServiceStub.getUser(request);
+        var start = Instant.now();
+        try {
+            var request = GetUserRequest.newBuilder()
+                    .setUserId(userId)
+                    .setTraceId(traceId)
+                    .setRequestId(requestId)
+                    .build();
+            return userServiceStub.getUser(request);
+        } finally {
+            bottleneckMetrics.recordGrpcUserCall(Duration.between(start, Instant.now()));
+        }
     }
 
     private GetSegmentsResponse callSegmentService(String userId, String traceId, String requestId) {
-        var request = GetSegmentsRequest.newBuilder()
-                .setUserId(userId)
-                .setTraceId(traceId)
-                .setRequestId(requestId)
-                .build();
-        return segmentServiceStub.getSegments(request);
+        var start = Instant.now();
+        try {
+            var request = GetSegmentsRequest.newBuilder()
+                    .setUserId(userId)
+                    .setTraceId(traceId)
+                    .setRequestId(requestId)
+                    .build();
+            return segmentServiceStub.getSegments(request);
+        } finally {
+            bottleneckMetrics.recordGrpcSegmentCall(Duration.between(start, Instant.now()));
+        }
     }
 
     private GetTargetingRulesResponse callTargetingService(String userId, String traceId, String requestId) {
-        var request = GetTargetingRulesRequest.newBuilder()
-                .setUserId(userId)
-                .setTraceId(traceId)
-                .setRequestId(requestId)
-                .build();
-        return targetingServiceStub.getTargetingRules(request);
+        var start = Instant.now();
+        try {
+            var request = GetTargetingRulesRequest.newBuilder()
+                    .setUserId(userId)
+                    .setTraceId(traceId)
+                    .setRequestId(requestId)
+                    .build();
+            return targetingServiceStub.getTargetingRules(request);
+        } finally {
+            bottleneckMetrics.recordGrpcTargetingCall(Duration.between(start, Instant.now()));
+        }
     }
 
     private Map<String, Object> callMlService(String userId, String traceId, GetSegmentsResponse segmentResponse) {
         var segmentNames = segmentResponse.getSegmentsList().stream()
-                .map(s -> s.getName())
+                .map(Segment::getName)
                 .toList();
 
         var mlRequest = Map.of(

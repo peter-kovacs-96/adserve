@@ -601,7 +601,7 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "http_server_requests_active_seconds_active_count{app=\"adserve\"}",
+          "expr": "sum(http_server_requests_active_seconds_gcount{app=\"adserve\"})",
           "legendFormat": "{{service}}",
           "refId": "A"
         }

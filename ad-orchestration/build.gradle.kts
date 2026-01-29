@@ -15,6 +15,9 @@ dependencies {
     // Metrics
     implementation("io.micrometer:micrometer-registry-prometheus")
 
+    // Resilience4j Spring Boot Starter (auto-configuration)
+    implementation("io.github.resilience4j:resilience4j-spring-boot3:2.2.0")
+
     // gRPC client
     implementation("io.grpc:grpc-netty-shaded:$grpcVersion")
     implementation("io.grpc:grpc-protobuf:$grpcVersion")
