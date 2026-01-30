@@ -33,7 +33,7 @@ public class BusinessMetrics {
     private final Timer requestDuration;
 
     public BusinessMetrics(MetricsProperties properties, MeterRegistry meterRegistry) {
-        this.enabled = properties.isBusinessEnabled();
+        this.enabled = properties.businessEnabled();
         this.meterRegistry = meterRegistry;
 
         if (enabled) {

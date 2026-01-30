@@ -1,7 +1,6 @@
 package io.adserve.orchestration.config;
 
 import io.adserve.orchestration.client.MlInferenceClient;
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
@@ -13,7 +12,6 @@ import java.net.http.HttpClient;
 import java.util.concurrent.Executors;
 
 @Configuration
-@EnableConfigurationProperties(HttpClientProperties.class)
 public class HttpClientConfig {
 
     private final HttpClientProperties properties;
