@@ -255,17 +255,60 @@ try (var scope = StructuredTaskScope.open(
 | **Built-in Timeouts** | Configurable deadline enforcement (10ms for gRPC, 80ms for partners) |
 | **Short-Circuiting** | Built-in cancellation when any subtask fails |
 
-### Configuration
+## Resilience & Timeout Architecture
 
-Key timeouts are configurable via `application.properties`:
+### StructuredTaskScope and Timeouts
 
-```properties
-# gRPC client deadline
-grpc.client.deadline-ms=10
+When using `StructuredTaskScope`, the `close()` method (from try-with-resources) **waits for all forked tasks to complete** - this is by design for structured concurrency to prevent leaked tasks.
 
-# Partner bidding timeout
-http.client.partner.timeout-ms=80
+**Critical Rule:** HTTP timeouts must be shorter than StructuredTaskScope timeout.
+
 ```
+HTTP connect + read timeout  <  StructuredTaskScope timeout
+```
+
+If HTTP timeouts exceed the scope timeout, `close()` blocks waiting for HTTP calls to finish, causing latency spikes under load.
+
+### Circuit Breaker
+
+Each partner has an independent circuit breaker (Resilience4j) to isolate failures:
+
+```
+CLOSED ──────────────> OPEN ──────────────> HALF_OPEN
+         (failures          (wait period)        │
+          exceed             expires)            │
+         threshold)                              │
+    ▲                                            │
+    └────────────────────────────────────────────┘
+                    (test calls succeed)
+```
+
+- **CLOSED:** Calls pass through normally
+- **OPEN:** Calls fail immediately without making HTTP request
+- **HALF_OPEN:** Limited test calls to check if partner recovered
+
+The circuit opens when failure rate or slow-call rate exceeds configured thresholds.
+
+### Bulkhead
+
+Limits concurrent calls per partner to prevent resource exhaustion:
+
+- Each partner has a max concurrent call limit
+- Excess calls fail immediately (no queuing)
+- Isolates slow partners from affecting others
+
+### Request Flow with Resilience
+
+```
+Partner Call
+    │
+    ▼
+┌─────────┐     ┌──────────────────┐     ┌──────────┐     ┌───────────┐
+│  Retry  │ ──▶ │  Circuit Breaker │ ──▶ │ Bulkhead │ ──▶ │ HTTP Call │
+└─────────┘     └──────────────────┘     └──────────┘     └───────────┘
+```
+
+All resilience settings are configurable via `application.properties`. See the file for current values.
 
 ## Development
 
@@ -294,26 +337,3 @@ http.client.partner.timeout-ms=80
 | `/api/v1/ads/request` | POST | Serve ad request |
 | `/actuator/health` | GET | Health check |
 | `/actuator/prometheus` | GET | Prometheus metrics |
-
-## Why This Stack?
-
-### Virtual Threads Over Reactive
-
-- **Simpler Code:** Sequential-looking blocking code
-- **Better Debugging:** Standard stack traces
-- **Easier Profiling:** JFR shows your methods directly
-- **No Callback Hell:** No reactive operators to chain
-
-### StructuredTaskScope Over CompletableFuture
-
-- **Structured Concurrency:** Clear parent-child relationships
-- **Automatic Cleanup:** try-with-resources ensures no leaks
-- **Short-Circuiting:** Built-in cancellation policies
-- **Standard Exception Handling:** No `CompletionException` unwrapping
-
-### gRPC Over REST (Internal Services)
-
-- **Performance:** Binary protocol, more efficient than JSON
-- **Type Safety:** Compile-time contract verification
-- **Code Generation:** Auto-generated stubs from `.proto` files
-- **HTTP/2:** Multiplexing and header compression
