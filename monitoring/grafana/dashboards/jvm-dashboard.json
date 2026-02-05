@@ -35,7 +35,8 @@
             "mode": "absolute",
             "steps": [
               { "color": "green", "value": null },
-              { "color": "red", "value": 0.05 }
+              { "color": "yellow", "value": 0.001 },
+              { "color": "red", "value": 0.005 }
             ]
           },
           "unit": "s"
@@ -52,11 +53,11 @@
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "expr": "rate(jvm_gc_pause_seconds_sum[1m]) / rate(jvm_gc_pause_seconds_count[1m])",
-          "legendFormat": "{{job}} - {{cause}}",
+          "legendFormat": "{{job}} avg pause",
           "refId": "A"
         }
       ],
-      "title": "GC Pause Time (avg)",
+      "title": "ZGC Pause Time (should be <1ms)",
       "type": "timeseries"
     },
     {
@@ -99,11 +100,11 @@
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "expr": "rate(jvm_gc_pause_seconds_count[1m])",
-          "legendFormat": "{{job}} - {{cause}}",
+          "legendFormat": "{{job}} GC cycles/sec",
           "refId": "A"
         }
       ],
-      "title": "GC Pause Frequency (per second)",
+      "title": "ZGC Cycle Frequency",
       "type": "timeseries"
     },
     {
@@ -128,17 +129,10 @@
             "showPoints": "never",
             "spanNulls": false,
             "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "line" }
+            "thresholdsStyle": { "mode": "off" }
           },
           "mappings": [],
-          "thresholds": {
-            "mode": "percentage",
-            "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 70 },
-              { "color": "red", "value": 85 }
-            ]
-          },
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
           "unit": "bytes"
         },
         "overrides": []
@@ -188,10 +182,17 @@
             "showPoints": "auto",
             "spanNulls": false,
             "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "off" }
+            "thresholdsStyle": { "mode": "line" }
           },
           "mappings": [],
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "thresholds": {
+            "mode": "percentage",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 85 },
+              { "color": "red", "value": 95 }
+            ]
+          },
           "unit": "percent"
         },
         "overrides": []
@@ -210,7 +211,7 @@
           "refId": "A"
         }
       ],
-      "title": "Heap Usage %",
+      "title": "Heap Usage % (ZGC handles high occupancy well)",
       "type": "timeseries"
     },
     {
@@ -253,17 +254,11 @@
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
           "expr": "jvm_threads_live_threads",
-          "legendFormat": "{{job}} live",
+          "legendFormat": "{{job}} carrier threads",
           "refId": "A"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "jvm_threads_peak_threads",
-          "legendFormat": "{{job}} peak",
-          "refId": "B"
         }
       ],
-      "title": "Platform Threads (Carrier Threads)",
+      "title": "Carrier Threads (Virtual Threads run on these)",
       "type": "timeseries"
     },
     {
@@ -310,7 +305,7 @@
           "refId": "A"
         }
       ],
-      "title": "Thread States (ad-orchestration)",
+      "title": "Thread States (blocked/waiting may indicate pinned virtual threads)",
       "type": "timeseries"
     },
     {
@@ -451,18 +446,18 @@
           "refId": "A"
         }
       ],
-      "title": "Memory Allocation Rate (heap pressure indicator)",
+      "title": "Memory Allocation Rate (drives ZGC frequency)",
       "type": "timeseries"
     }
   ],
   "refresh": "5s",
   "schemaVersion": 39,
-  "tags": ["adserve", "jvm", "performance"],
+  "tags": ["adserve", "jvm", "zgc", "virtual-threads"],
   "templating": { "list": [] },
   "time": { "from": "now-15m", "to": "now" },
   "timepicker": {},
   "timezone": "browser",
-  "title": "AdServe JVM Monitoring",
+  "title": "AdServe JVM (Java 25 + ZGC + Virtual Threads)",
   "uid": "adserve-jvm",
   "version": 1
 }

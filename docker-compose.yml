@@ -8,56 +8,16 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - SPRING_APPLICATION_NAME=ad-orchestration
-      - SERVER_PORT=8080
-      # gRPC clients
+      # HTTP Client - Docker hostnames override
+      - HTTP_CLIENT_GROUPS_MLINFERENCE=http://ml-inference:8081
+      - HTTP_CLIENT_GROUPS_NIKE=http://partner-simulator:8082/partners/nike
+      - HTTP_CLIENT_GROUPS_ADIDAS=http://partner-simulator:8082/partners/adidas
+      - HTTP_CLIENT_GROUPS_NORTHFACE=http://partner-simulator:8082/partners/northface
+
+      # gRPC - Docker hostnames override
       - GRPC_CLIENT_USER_SERVICE_HOST=user-service
-      - GRPC_CLIENT_USER_SERVICE_PORT=9090
       - GRPC_CLIENT_SEGMENT_SERVICE_HOST=segment-service
-      - GRPC_CLIENT_SEGMENT_SERVICE_PORT=9091
       - GRPC_CLIENT_TARGETING_SERVICE_HOST=targeting-service
-      - GRPC_CLIENT_TARGETING_SERVICE_PORT=9092
-      # HTTP clients (type-safe config)
-      # Rule: HTTP timeouts < StructuredTaskScope timeout (100ms for partners)
-      - HTTP_CLIENT_ML_INFERENCE_BASE_URL=http://ml-inference:8081
-      - HTTP_CLIENT_ML_INFERENCE_CONNECT_TIMEOUT=10ms
-      - HTTP_CLIENT_ML_INFERENCE_READ_TIMEOUT=30ms
-      # Partner clients - each partner has its own configuration
-      # In production, these would be different external URLs
-      - HTTP_CLIENT_PARTNERS_NIKE_BASE_URL=http://partner-simulator:8082/partners/nike
-      - HTTP_CLIENT_PARTNERS_NIKE_CONNECT_TIMEOUT=10ms
-      - HTTP_CLIENT_PARTNERS_NIKE_READ_TIMEOUT=85ms
-      - HTTP_CLIENT_PARTNERS_ADIDAS_BASE_URL=http://partner-simulator:8082/partners/adidas
-      - HTTP_CLIENT_PARTNERS_ADIDAS_CONNECT_TIMEOUT=10ms
-      - HTTP_CLIENT_PARTNERS_ADIDAS_READ_TIMEOUT=85ms
-      - HTTP_CLIENT_PARTNERS_PUMA_BASE_URL=http://partner-simulator:8082/partners/puma
-      - HTTP_CLIENT_PARTNERS_PUMA_CONNECT_TIMEOUT=10ms
-      - HTTP_CLIENT_PARTNERS_PUMA_READ_TIMEOUT=85ms
-      - HTTP_CLIENT_PARTNERS_UNDERARMOUR_BASE_URL=http://partner-simulator:8082/partners/underarmour
-      - HTTP_CLIENT_PARTNERS_UNDERARMOUR_CONNECT_TIMEOUT=10ms
-      - HTTP_CLIENT_PARTNERS_UNDERARMOUR_READ_TIMEOUT=85ms
-      - HTTP_CLIENT_PARTNERS_NEWBALANCE_BASE_URL=http://partner-simulator:8082/partners/newbalance
-      - HTTP_CLIENT_PARTNERS_NEWBALANCE_CONNECT_TIMEOUT=10ms
-      - HTTP_CLIENT_PARTNERS_NEWBALANCE_READ_TIMEOUT=85ms
-      - HTTP_CLIENT_PARTNERS_ASICS_BASE_URL=http://partner-simulator:8082/partners/asics
-      - HTTP_CLIENT_PARTNERS_ASICS_CONNECT_TIMEOUT=10ms
-      - HTTP_CLIENT_PARTNERS_ASICS_READ_TIMEOUT=85ms
-      - HTTP_CLIENT_PARTNERS_REEBOK_BASE_URL=http://partner-simulator:8082/partners/reebok
-      - HTTP_CLIENT_PARTNERS_REEBOK_CONNECT_TIMEOUT=10ms
-      - HTTP_CLIENT_PARTNERS_REEBOK_READ_TIMEOUT=85ms
-      - HTTP_CLIENT_PARTNERS_SKECHERS_BASE_URL=http://partner-simulator:8082/partners/skechers
-      - HTTP_CLIENT_PARTNERS_SKECHERS_CONNECT_TIMEOUT=10ms
-      - HTTP_CLIENT_PARTNERS_SKECHERS_READ_TIMEOUT=85ms
-      - HTTP_CLIENT_PARTNERS_COLUMBIA_BASE_URL=http://partner-simulator:8082/partners/columbia
-      - HTTP_CLIENT_PARTNERS_COLUMBIA_CONNECT_TIMEOUT=10ms
-      - HTTP_CLIENT_PARTNERS_COLUMBIA_READ_TIMEOUT=85ms
-      - HTTP_CLIENT_PARTNERS_NORTHFACE_BASE_URL=http://partner-simulator:8082/partners/northface
-      - HTTP_CLIENT_PARTNERS_NORTHFACE_CONNECT_TIMEOUT=10ms
-      - HTTP_CLIENT_PARTNERS_NORTHFACE_READ_TIMEOUT=85ms
-      # Metrics
-      - METRICS_BUSINESS_ENABLED=true
-      - METRICS_BOTTLENECK_ENABLED=true
-      - LOGGING_LEVEL_IO_ADSERVE=INFO
     depends_on:
       user-service:
         condition: service_healthy
@@ -258,7 +218,7 @@ services:
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
-      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/etc/grafana/provisioning/dashboards/overview.json
+      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/etc/grafana/provisioning/dashboards/adserve-dashboard.json
     volumes:
       - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
       - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro

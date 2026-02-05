@@ -18,6 +18,8 @@ EXPOSE 9091
 
 ENV JAVA_OPTS="-Xms256m -Xmx256m \
     -XX:+UseZGC \
+    -XX:ReservedCodeCacheSize=48m \
+    -XX:MaxMetaspaceSize=64m \
     --enable-preview \
     -Djdk.tracePinnedThreads=short \
     -Xlog:gc*:stdout:time,level,tags \
