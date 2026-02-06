@@ -16,10 +16,10 @@ USER adserve
 # HTTP port
 EXPOSE 8082
 
-ENV JAVA_OPTS="-Xms256m -Xmx256m \
+ENV JAVA_OPTS="-Xms288m -Xmx288m \
     -XX:+UseZGC \
     -XX:ReservedCodeCacheSize=48m \
-    -XX:MaxMetaspaceSize=64m \
+    -XX:MaxMetaspaceSize=48m \
     --enable-preview \
     -Djdk.tracePinnedThreads=short \
     -Xlog:gc*:stdout:time,level,tags \

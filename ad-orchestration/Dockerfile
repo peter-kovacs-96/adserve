@@ -21,10 +21,10 @@ USER adserve
 EXPOSE 8080
 
 # JVM settings with preview features enabled
-ENV JAVA_OPTS="-Xms384m -Xmx384m \
+ENV JAVA_OPTS="-Xms416m -Xmx416m \
     -XX:+UseZGC \
     -XX:ReservedCodeCacheSize=64m \
-    -XX:MaxMetaspaceSize=128m \
+    -XX:MaxMetaspaceSize=96m \
     --enable-preview \
     -Djdk.tracePinnedThreads=short \
     -Xlog:gc*:stdout:time,level,tags \
