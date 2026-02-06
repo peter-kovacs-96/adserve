@@ -25,7 +25,7 @@ ENV JAVA_OPTS="-Xms256m -Xmx256m \
     -Xlog:gc*:stdout:time,level,tags \
     -Djava.security.egd=file:/dev/./urandom"
 
-HEALTHCHECK --interval=30s --timeout=3s --start-period=60s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=3s --start-period=35s --retries=3 \
     CMD wget -qO- http://localhost:9003/actuator/health || exit 1
 
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]
