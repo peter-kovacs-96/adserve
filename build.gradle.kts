@@ -55,6 +55,9 @@ subprojects {
     }
 
     dependencies {
+        // Spring gRPC BOM
+        "implementation"(platform("org.springframework.grpc:spring-grpc-dependencies:1.0.2"))
+
         // Spring Boot Starter (common to all services)
         "implementation"("org.springframework.boot:spring-boot-starter")
 

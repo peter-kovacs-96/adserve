@@ -1,15 +1,17 @@
 # AdServe - High-Performance Ad Serving Platform
 
-Production-grade real-time bidding (RTB) platform demonstrating modern Java concurrency with Virtual Threads and StructuredTaskScope.
+Real-time bidding (RTB) platform demonstrating modern Java structured concurrency with Virtual Threads and `StructuredTaskScope`.
 
 ## Overview
 
-AdServe demonstrates Java 25's Virtual Threads for efficient structured concurrency. The system orchestrates parallel service calls, real-time ML predictions, and demand partner bidding to serve targeted advertisements.
+AdServe orchestrates parallel service calls, real-time ML predictions, and demand partner bidding to serve targeted advertisements. It showcases Java's Virtual Threads and `StructuredTaskScope` (preview) for structured, timeout-controlled concurrency in a microservices architecture.
 
-**Key Features:**
-- **Concurrency:** Virtual Threads with StructuredTaskScope (Java 25 Preview)
-- **Protocol:** OpenRTB 2.6 for partner communication
-- **Observability:** Prometheus metrics and Grafana dashboards
+**Key highlights:**
+- Structured concurrency with Virtual Threads and `StructuredTaskScope`
+- Spring Framework native resilience (`@Retryable`, `@ConcurrencyLimit`)
+- HTTP Service Registry with `@ImportHttpServices` for declarative HTTP client management
+- Spring gRPC (`@ImportGrpcClients`) for internal service communication, OpenRTB 2.6 for partner bidding
+- Prometheus + Grafana observability
 
 ## Architecture
 
@@ -57,283 +59,112 @@ graph TB
 
 ## Request Flow
 
-| Phase | Description | Implementation |
-|-------|-------------|----------------|
-| **1. Internal Services** | Fetch user profile, segments, and targeting rules | `StructuredTaskScope` with 3 parallel gRPC calls |
-| **2. ML Prediction** | Predict CTR/CVR using request context | Sequential REST call |
-| **3. Partner Bidding** | Call 10 demand partners using OpenRTB 2.6 | `StructuredTaskScope` with 10 parallel HTTP calls |
+| Phase | Description | Execution |
+|-------|-------------|-----------|
+| **1. Internal Services** | Fetch user profile, segments, and targeting rules | Parallel gRPC calls via `StructuredTaskScope` (fail-fast) |
+| **2. ML Prediction** | Predict CTR/CVR using request context and segments | Sequential REST call |
+| **3. Partner Bidding** | Collect bids from demand partners using OpenRTB 2.6 | Parallel REST calls via `StructuredTaskScope` (partial results accepted) |
 | **4. Auction** | Select highest bid (first-price auction) | In-memory comparison |
-| **5. Response** | Return winning ad to client | JSON serialization |
+| **5. Response** | Return winning ad with metadata to client | JSON response |
 
 ## Technology Stack
 
-| Component | Technology | Version | Purpose |
-|-----------|------------|---------|---------|
-| Language | Java | 25 | Virtual Threads, StructuredTaskScope (preview) |
-| Framework | Spring Boot | 4.0.1 | REST API, dependency injection |
-| Build Tool | Gradle | 8.x | Multi-module project management |
-| Internal RPC | gRPC | 1.75.0 | High-performance service-to-service |
-| Protocol Buffers | protobuf | 4.29.3 | Service contract definitions |
-| RTB Protocol | OpenRTB | 2.6 | Industry standard bid request/response |
-| Monitoring | Prometheus + Grafana | latest | Metrics and dashboards |
+| Component | Technology | Purpose |
+|-----------|------------|---------|
+| Language | Java (preview features enabled) | Virtual Threads, `StructuredTaskScope` |
+| Framework | Spring Boot / Spring Framework | REST API, dependency injection, resilience |
+| Build | Gradle (Kotlin DSL) | Multi-module project management |
+| Internal RPC | Spring gRPC + Protocol Buffers | High-performance service-to-service communication with auto-configured channels and stubs |
+| HTTP Clients | Spring HTTP Service Registry (`@ImportHttpServices`) | Declarative HTTP client proxies grouped by service |
+| RTB Protocol | OpenRTB 2.6 | Industry-standard bid request/response format |
+| Resilience | Spring native (`@Retryable`, `@ConcurrencyLimit`) | Retry, concurrency limiting on method invocations |
+| Monitoring | Prometheus + Grafana | Metrics collection and dashboards |
+| Runtime | ZGC (Generational) | Low-latency garbage collection |
 
 ## Services
 
-```mermaid
-graph LR
-    subgraph "REST Services"
-        AO[ad-orchestration<br/>:8080]
-        ML[ml-inference<br/>:8081]
-        PS[partner-simulator<br/>:8082]
-    end
+### ad-orchestration (port 8080) - Main Service
 
-    subgraph "gRPC Services"
-        US[user-service<br/>:9090]
-        SS[segment-service<br/>:9091]
-        TS[targeting-service<br/>:9092]
-    end
+The central orchestrator and the service we own. Receives ad requests, coordinates all backend calls using structured concurrency, runs the auction, and returns the winning ad. Key design decisions:
 
-    subgraph "Monitoring"
-        PR[prometheus<br/>:9090]
-        GR[grafana<br/>:3001]
-    end
+- **Structured concurrency**: Phase 1 (internal services) uses `awaitAllSuccessfulOrThrow` - if any internal service fails, the entire scope fails fast. Phase 3 (partner bidding) uses `allSuccessfulOrThrow` with timeout tolerance - partial bid results are accepted.
+- **Spring gRPC clients**: Internal service stubs are auto-configured via `@ImportGrpcClients`, with named channels configured in `application.properties`. No manual channel or stub management needed.
+- **HTTP Service Registry**: Partner and ML clients are declared as `@HttpExchange` interfaces, organized into groups via `@ImportHttpServices`, and configured through a single `RestClientHttpServiceGroupConfigurer`. The underlying `HttpClient` uses a Virtual Thread executor.
+- **Timeout strategy**: HTTP connect/read timeouts are configured to be shorter than the `StructuredTaskScope` timeout. This ensures `scope.close()` does not block waiting for HTTP calls, which would cause latency spikes.
+- **Resilience**: Spring Framework native `@Retryable` on HTTP service methods with configurable retry count, delay, and back-off. `@ConcurrencyLimit` available for concurrency throttling. All settings are externalized in `application.properties`.
+- **Observability**: Prometheus metrics via Micrometer, distributed tracing with OpenTelemetry bridge, custom auction-win counters. All services propagate trace and request IDs.
 
-    AO --> US
-    AO --> SS
-    AO --> TS
-    AO --> ML
-    AO --> PS
-    PR --> AO
-    GR --> PR
-```
+### Mock / Simulator Services
 
-| Service | Port | Protocol | Description |
-|---------|------|----------|-------------|
-| ad-orchestration | 8080 | HTTP/REST | Main orchestrator, coordinates all service calls |
-| user-service | 9090 | gRPC | User profile data |
-| segment-service | 9091 | gRPC | Behavioral segments |
-| targeting-service | 9092 | gRPC | Targeting rules |
-| ml-inference | 8081 | HTTP/REST | CTR/CVR predictions (mock) |
-| partner-simulator | 8082 | HTTP/REST | Simulates 10 demand partners with OpenRTB 2.6 |
+These services exist to provide a realistic environment for ad-orchestration. They return synthetic data and simulate real-world latency. No business logic of significance lives here.
+
+| Service | Port | Protocol | What it does |
+|---------|------|----------|--------------|
+| **user-service** | 9090 | gRPC | Returns mock user profile data (demographics, device info) |
+| **segment-service** | 9091 | gRPC | Returns mock behavioral/demographic user segments with scores |
+| **targeting-service** | 9092 | gRPC | Returns mock targeting rules and eligible partner lists |
+| **ml-inference** | 8081 | REST | Returns mock CTR/CVR predictions with random variation |
+| **partner-simulator** | 8082 | REST | Simulates 10 demand partners returning OpenRTB 2.6 bid responses with randomized prices and simulated network latency |
+
+### Monitoring
+
+| Service | Port | Purpose |
+|---------|------|---------|
+| **Prometheus** | 9090 | Scrapes `/actuator/prometheus` from all services |
+| **Grafana** | 3001 | Dashboards for ad-orchestration metrics (default credentials: admin/admin) |
 
 ## Quick Start
 
 ### Prerequisites
 
-- Java 25
-- Gradle 8.x
+- Java (with preview features support)
 - Docker & Docker Compose (for full stack)
 
 ### Run with Docker Compose
 
 ```bash
-# Build and start all services
 docker-compose up --build
-
-# Test the API
-curl -X POST http://localhost:8080/api/v1/ads/request \
-  -H "Content-Type: application/json" \
-  -d '{"userId":"user-123","deviceType":"mobile","country":"USA"}'
-
-# View Grafana dashboards
-open http://localhost:3001  # admin/admin
-
-# Stop all services
-docker-compose down
 ```
+
+Test the API by sending a POST request to `http://localhost:8080/api/v1/ads/request` with a JSON body containing `userId`, `deviceType`, and `context` fields.
+
+Grafana dashboards are available at `http://localhost:3001`.
 
 ### Run Locally
 
-Start each service in a separate terminal:
+Start each service with `./gradlew :<service-name>:bootRun` in separate terminals. Start ad-orchestration last, as it depends on all other services.
 
-```bash
-# Terminal 1 - User Service
-./gradlew :user-service:bootRun
+### Development Commands
 
-# Terminal 2 - Segment Service
-./gradlew :segment-service:bootRun
-
-# Terminal 3 - Targeting Service
-./gradlew :targeting-service:bootRun
-
-# Terminal 4 - ML Inference
-./gradlew :ml-inference:bootRun
-
-# Terminal 5 - Partner Simulator
-./gradlew :partner-simulator:bootRun
-
-# Terminal 6 - Ad Orchestration
-./gradlew :ad-orchestration:bootRun
-```
-
-### Test Request
-
-```bash
-curl -X POST http://localhost:8080/api/v1/ads/request \
-  -H "Content-Type: application/json" \
-  -d '{
-    "userId": "user-123",
-    "deviceType": "mobile",
-    "country": "USA"
-  }'
-```
-
-### Example Response
-
-```json
-{
-  "requestId": "req-abc123",
-  "traceId": "trace-xyz789",
-  "status": "success",
-  "ad": {
-    "partnerId": "nike",
-    "bidPrice": 2.50,
-    "adId": "ad-12345",
-    "adCreativeUrl": "https://partner.com/ad.jpg"
-  },
-  "processingTimeMs": 87,
-  "metadata": {
-    "internalServicesCalled": 3,
-    "mlServiceCalled": true,
-    "partnersCalled": 10,
-    "bidsReceived": 8
-  }
-}
-```
+| Command | Description |
+|---------|-------------|
+| `./gradlew build` | Build all services |
+| `./gradlew test` | Run all tests |
+| `./gradlew generateProto` | Regenerate gRPC stubs from proto definitions |
 
 ## Project Structure
 
 ```
 adserve/
-├── ad-orchestration/       # Main orchestrator (REST API)
-├── user-service/           # gRPC - User profiles
-├── segment-service/        # gRPC - Behavioral segments
-├── targeting-service/      # gRPC - Targeting rules
-├── ml-inference/           # REST - ML predictions
-├── partner-simulator/      # REST - 10 mock DSPs
-├── proto/                  # Protocol Buffer definitions
+├── ad-orchestration/       # Main orchestrator service (REST API)
+├── user-service/           # Mock gRPC user profile service
+├── segment-service/        # Mock gRPC segment service
+├── targeting-service/      # Mock gRPC targeting service
+├── ml-inference/           # Mock REST ML prediction service
+├── partner-simulator/      # Mock REST demand partner simulator (10 partners)
+├── proto/                  # Protocol Buffer definitions (shared)
 ├── monitoring/
-│   ├── prometheus/         # Prometheus configuration
-│   └── grafana/            # Grafana dashboards
-├── docker-compose.yml      # Container orchestration
-├── build.gradle.kts        # Root Gradle configuration
-└── settings.gradle.kts     # Multi-module settings
+│   ├── prometheus/         # Prometheus scrape configuration
+│   └── grafana/            # Datasource and dashboard provisioning
+├── docker-compose.yml
+├── build.gradle.kts        # Root build configuration
+└── settings.gradle.kts     # Module declarations
 ```
 
-## Key Implementation Details
-
-### Virtual Threads with StructuredTaskScope
-
-The orchestrator uses `StructuredTaskScope` for structured parallel execution:
-
-```java
-try (var scope = StructuredTaskScope.open(
-        StructuredTaskScope.Joiner.awaitAllSuccessfulOrThrow(),
-        cf -> cf.withTimeout(Duration.ofMillis(deadlineMs)))) {
-
-    // Fork parallel calls to internal services
-    var userTask = scope.fork(() -> callUserService(userId));
-    var segmentTask = scope.fork(() -> callSegmentService(userId));
-    var targetingTask = scope.fork(() -> callTargetingService(userId));
-
-    // Wait for all tasks to complete
-    scope.join();
-
-    // Get results
-    var userResponse = userTask.get();
-    var segmentResponse = segmentTask.get();
-    var targetingResponse = targetingTask.get();
-}
-```
-
-### Benefits of This Approach
-
-| Feature | Benefit |
-|---------|---------|
-| **Virtual Threads** | Lightweight threads for efficient I/O, threads unmount during blocking operations |
-| **StructuredTaskScope** | Clear parent-child relationships, automatic cleanup with try-with-resources |
-| **Built-in Timeouts** | Configurable deadline enforcement (10ms for gRPC, 80ms for partners) |
-| **Short-Circuiting** | Built-in cancellation when any subtask fails |
-
-## Resilience & Timeout Architecture
-
-### StructuredTaskScope and Timeouts
-
-When using `StructuredTaskScope`, the `close()` method (from try-with-resources) **waits for all forked tasks to complete** - this is by design for structured concurrency to prevent leaked tasks.
-
-**Critical Rule:** HTTP timeouts must be shorter than StructuredTaskScope timeout.
-
-```
-HTTP connect + read timeout  <  StructuredTaskScope timeout
-```
-
-If HTTP timeouts exceed the scope timeout, `close()` blocks waiting for HTTP calls to finish, causing latency spikes under load.
-
-### Circuit Breaker
-
-Each partner has an independent circuit breaker (Resilience4j) to isolate failures:
-
-```
-CLOSED ──────────────> OPEN ──────────────> HALF_OPEN
-         (failures          (wait period)        │
-          exceed             expires)            │
-         threshold)                              │
-    ▲                                            │
-    └────────────────────────────────────────────┘
-                    (test calls succeed)
-```
-
-- **CLOSED:** Calls pass through normally
-- **OPEN:** Calls fail immediately without making HTTP request
-- **HALF_OPEN:** Limited test calls to check if partner recovered
-
-The circuit opens when failure rate or slow-call rate exceeds configured thresholds.
-
-### Bulkhead
-
-Limits concurrent calls per partner to prevent resource exhaustion:
-
-- Each partner has a max concurrent call limit
-- Excess calls fail immediately (no queuing)
-- Isolates slow partners from affecting others
-
-### Request Flow with Resilience
-
-```
-Partner Call
-    │
-    ▼
-┌─────────┐     ┌──────────────────┐     ┌──────────┐     ┌───────────┐
-│  Retry  │ ──▶ │  Circuit Breaker │ ──▶ │ Bulkhead │ ──▶ │ HTTP Call │
-└─────────┘     └──────────────────┘     └──────────┘     └───────────┘
-```
-
-All resilience settings are configurable via `application.properties`. See the file for current values.
-
-## Development
-
-### Build All Services
-
-```bash
-./gradlew build
-```
-
-### Run Tests
-
-```bash
-./gradlew test
-```
-
-### Generate gRPC Stubs
-
-```bash
-./gradlew generateProto
-```
-
-### Endpoints
+## API
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/v1/ads/request` | POST | Serve ad request |
-| `/actuator/health` | GET | Health check |
-| `/actuator/prometheus` | GET | Prometheus metrics |
+| `/api/v1/ads/request` | POST | Serve an ad request |
+| `/actuator/health` | GET | Health check (all services) |
+| `/actuator/prometheus` | GET | Prometheus metrics (all services) |

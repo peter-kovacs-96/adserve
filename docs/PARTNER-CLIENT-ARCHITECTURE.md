@@ -1,201 +1,59 @@
-# HTTP Client Architecture (Spring Boot 4.x Best Practices)
+# HTTP Client & Resilience Architecture
 
 ## Overview
 
-This document describes the enterprise-grade HTTP client configuration using modern Spring Boot 4.x patterns:
+This document describes the HTTP client and resilience architecture for ad-orchestration, using modern Spring Framework patterns:
 
-- **Type-safe configuration** via `@ConfigurationProperties` records
-- **Property-based timeouts** using Spring Boot's `ClientHttpRequestFactorySettings`
-- **Resilience4j** for circuit breaker, bulkhead, and retry patterns
-- **Full externalization** - all settings configurable via properties/environment variables
+- **HTTP Service Registry** with `@ImportHttpServices` for declarative, group-based HTTP client management
+- **`@HttpExchange` interfaces** as type-safe HTTP service contracts
+- **Spring Framework native resilience** with `@Retryable` and `@ConcurrencyLimit`
+- **Virtual Thread executor** backing the shared JDK `HttpClient`
 
-## Architecture
+## HTTP Service Registry
 
-```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                         Ad Orchestration Service                         │
-│                                                                          │
-│  ┌─────────────────────────────────────────────────────────────────────┐│
-│  │                    Configuration Layer                               ││
-│  │                                                                      ││
-│  │  HttpClientProperties (record)     Resilience4j Auto-Config         ││
-│  │  ├── mlInference                   ├── CircuitBreakerRegistry       ││
-│  │  │   ├── baseUrl                   ├── BulkheadRegistry             ││
-│  │  │   ├── connectTimeout            └── RetryRegistry                ││
-│  │  │   └── readTimeout                                                ││
-│  │  └── partner                                                        ││
-│  │      ├── baseUrl                                                    ││
-│  │      ├── connectTimeout                                             ││
-│  │      └── readTimeout                                                ││
-│  └─────────────────────────────────────────────────────────────────────┘│
-│                                    │                                     │
-│  ┌─────────────────────────────────▼───────────────────────────────────┐│
-│  │                      Client Layer                                    ││
-│  │                                                                      ││
-│  │  MlInferenceClient              PartnerClient                       ││
-│  │  └── RestClient                 ├── RestClient                      ││
-│  │      └── JdkClientHttpRequest   ├── CircuitBreaker (per partner)    ││
-│  │          Factory (with timeout) ├── Bulkhead (per partner)          ││
-│  │                                 ├── Retry (per partner)             ││
-│  │                                 └── JdkClientHttpRequestFactory     ││
-│  └─────────────────────────────────────────────────────────────────────┘│
-└─────────────────────────────────────────────────────────────────────────┘
-```
+HTTP service clients are organized into **groups** using `@ImportHttpServices`. Each group maps to a logical service (e.g., a specific partner or the ML inference service) and shares the same HTTP client configuration.
 
-## Configuration
+Groups are declared on the configuration class, each specifying which `@HttpExchange` interface(s) belong to it. Spring automatically creates and registers proxy beans for each interface.
 
-### Type-Safe Properties (HttpClientProperties.java)
+A single `RestClientHttpServiceGroupConfigurer` bean configures all groups. It creates one shared JDK `HttpClient` with a Virtual Thread executor and applies per-group settings (base URL, read timeout) from externalized properties.
 
-```java
-@ConfigurationProperties(prefix = "http.client")
-public record HttpClientProperties(
-        ServiceConfig mlInference,
-        ServiceConfig partner
-) {
-    public record ServiceConfig(
-            String baseUrl,
-            Duration connectTimeout,
-            Duration readTimeout
-    ) {}
-}
-```
+### Configuration Properties
 
-### application.properties
+HTTP client settings are externalized via `@ConfigurationProperties`:
 
-```properties
-# HTTP clients (type-safe configuration)
-http.client.ml-inference.base-url=http://localhost:8081
-http.client.ml-inference.connect-timeout=100ms
-http.client.ml-inference.read-timeout=50ms
+- **`http.client.connect-timeout`** - Connect timeout applied to the shared `HttpClient`
+- **`http.client.read-timeout`** - Read timeout applied per-group via the request factory
+- **`http.client.groups.<name>`** - Base URL for each group (e.g., `http.client.groups.nike=http://localhost:8082/partners/nike`)
 
-http.client.partner.base-url=http://localhost:8082
-http.client.partner.connect-timeout=100ms
-http.client.partner.read-timeout=50ms
+In Docker, these are overridden via environment variables to use container hostnames.
 
-# Resilience4j Circuit Breaker
-resilience4j.circuitbreaker.configs.default.failure-rate-threshold=50
-resilience4j.circuitbreaker.configs.default.slow-call-rate-threshold=80
-resilience4j.circuitbreaker.configs.default.slow-call-duration-threshold=60ms
-resilience4j.circuitbreaker.configs.default.sliding-window-type=count_based
-resilience4j.circuitbreaker.configs.default.sliding-window-size=20
-resilience4j.circuitbreaker.configs.default.minimum-number-of-calls=10
-resilience4j.circuitbreaker.configs.default.wait-duration-in-open-state=5s
-resilience4j.circuitbreaker.configs.default.permitted-number-of-calls-in-half-open-state=3
+## Resilience
 
-# Resilience4j Bulkhead
-resilience4j.bulkhead.configs.default.max-concurrent-calls=10
-resilience4j.bulkhead.configs.default.max-wait-duration=0ms
+The project uses **Spring Framework native resilience** (enabled via `@EnableResilientMethods`), not Resilience4j.
 
-# Resilience4j Retry
-resilience4j.retry.configs.default.max-attempts=1
-resilience4j.retry.configs.default.wait-duration=0ms
-```
+### @Retryable
 
-### Environment Variables (Docker)
+Each `@HttpExchange` method is annotated with `@Retryable` using externalized property placeholders for `maxRetries` and `delay`. This allows retry behavior to be tuned per environment without code changes.
 
-```yaml
-environment:
-  - HTTP_CLIENT_ML_INFERENCE_BASE_URL=http://ml-inference:8081
-  - HTTP_CLIENT_ML_INFERENCE_CONNECT_TIMEOUT=100ms
-  - HTTP_CLIENT_ML_INFERENCE_READ_TIMEOUT=50ms
-  - HTTP_CLIENT_PARTNER_BASE_URL=http://partner-simulator:8082
-  - HTTP_CLIENT_PARTNER_CONNECT_TIMEOUT=100ms
-  - HTTP_CLIENT_PARTNER_READ_TIMEOUT=50ms
-```
+Retry settings are grouped by service type in `application.properties`:
+- `resilience.retry.partners.*` - Settings for all partner bid calls
+- `resilience.retry.ml-inference.*` - Settings for ML inference calls
 
-## Client Implementation
+### @ConcurrencyLimit
 
-### Using Spring Boot's RestClient.Builder
+`@ConcurrencyLimit` is available (currently commented out in the codebase) to limit concurrent calls per service method. This is particularly useful with Virtual Threads, where there is no inherent thread pool size to act as a natural throttle.
 
-```java
-@Bean
-public MlInferenceClient mlInferenceClient(RestClient.Builder builder) {
-    var settings = ClientHttpRequestFactorySettings.defaults()
-            .withConnectTimeout(properties.mlInference().connectTimeout())
-            .withReadTimeout(properties.mlInference().readTimeout());
+## Timeout Strategy
 
-    var requestFactory = ClientHttpRequestFactoryBuilder.detect().build(settings);
+HTTP connect and read timeouts **must be shorter** than any `StructuredTaskScope` timeout. If they are not, `scope.close()` will block waiting for in-flight HTTP calls to complete, causing latency spikes.
 
-    var restClient = builder
-            .baseUrl(properties.mlInference().baseUrl())
-            .requestFactory(requestFactory)
-            .build();
+The timeout hierarchy:
+1. **HTTP connect timeout** (shortest) - fails fast if the target is unreachable
+2. **HTTP read timeout** - fails if the target is slow to respond
+3. **StructuredTaskScope timeout** (longest) - overall deadline for the parallel execution phase
 
-    return HttpServiceProxyFactory
-            .builderFor(RestClientAdapter.create(restClient))
-            .build()
-            .createClient(MlInferenceClient.class);
-}
-```
+## Partner Client Registry
 
-### PartnerClient with Resilience4j
+Partner clients all implement a common `PartnerBidClient` interface. A `PartnerClientRegistry` bean collects all implementations and provides lookup by partner ID, allowing the auction loop to iterate over partners dynamically.
 
-```java
-public Map<String, Object> bid(String partnerId, Map<String, Object> request) {
-    var circuitBreaker = circuitBreakerRegistry.circuitBreaker(partnerId);
-    var bulkhead = bulkheadRegistry.bulkhead(partnerId);
-    var retry = retryRegistry.retry(partnerId);
-
-    return retry.executeSupplier(
-            () -> circuitBreaker.executeSupplier(
-                    () -> bulkhead.executeSupplier(
-                            () -> doHttpCall(partnerId, request))));
-}
-```
-
-## Key Design Decisions
-
-### 1. Type-Safe Configuration with Records
-
-- Java records provide immutable, concise configuration
-- `@ConfigurationProperties` enables IDE auto-completion
-- Defaults specified in record compact constructor
-
-### 2. Spring Boot Auto-Configuration
-
-- `RestClient.Builder` is auto-configured by Spring Boot
-- `ClientHttpRequestFactoryBuilder.detect()` selects the best HTTP client for the runtime
-- No manual HTTP client instantiation needed
-
-### 3. Resilience4j Spring Boot Starter
-
-- All resilience configuration externalized to properties
-- Registries auto-created from configuration
-- Per-partner instances created on-demand using default config
-
-### 4. Virtual Threads Compatibility
-
-- `ClientHttpRequestFactoryBuilder.detect()` selects JDK HttpClient on Java 21+
-- JDK HttpClient works well with virtual threads
-- No connection pool tuning needed - virtual threads handle blocking I/O efficiently
-
-## Dependencies
-
-```kotlin
-dependencies {
-    implementation("org.springframework.boot:spring-boot-starter-web")
-    implementation("io.github.resilience4j:resilience4j-spring-boot3:2.2.0")
-}
-```
-
-## Metrics
-
-Metrics are automatically exposed:
-
-| Metric | Type | Description |
-|--------|------|-------------|
-| `ad_partner_call_duration_seconds` | Histogram | Partner call duration with percentiles |
-| `ad_partner_calls_total` | Counter | Partner calls by status |
-| `resilience4j_circuitbreaker_*` | Various | Circuit breaker state and calls |
-| `resilience4j_bulkhead_*` | Gauge | Bulkhead availability |
-
-## Testing Configuration
-
-Override properties for tests:
-
-```properties
-# test/resources/application-test.properties
-http.client.ml-inference.connect-timeout=1s
-http.client.ml-inference.read-timeout=1s
-resilience4j.circuitbreaker.configs.default.minimum-number-of-calls=2
-```
+Each partner has its own `@HttpExchange` interface (extending `PartnerBidClient`) and its own HTTP service group, enabling per-partner base URL and timeout configuration.
