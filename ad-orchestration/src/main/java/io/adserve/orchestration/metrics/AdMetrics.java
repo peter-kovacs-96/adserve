@@ -1,6 +1,5 @@
 package io.adserve.orchestration.metrics;
 
-import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.stereotype.Component;
 
@@ -14,10 +13,6 @@ public class AdMetrics {
     }
 
     public void recordAuctionWin(String partnerId) {
-        Counter.builder("ad_auction_wins")
-                .description("Number of auction wins per partner")
-                .tag("partner", partnerId)
-                .register(meterRegistry)
-                .increment();
+        meterRegistry.counter("ad_auction_wins", "partner", partnerId).increment();
     }
 }

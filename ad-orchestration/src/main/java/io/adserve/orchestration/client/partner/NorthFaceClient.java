@@ -1,6 +1,5 @@
 package io.adserve.orchestration.client.partner;
 
-import org.springframework.resilience.annotation.ConcurrencyLimit;
 import org.springframework.resilience.annotation.Retryable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.service.annotation.HttpExchange;
@@ -13,7 +12,7 @@ public interface NorthFaceClient extends PartnerBidClient {
 
     @Override
     @PostExchange("/bid")
-    @ConcurrencyLimit(100)
+    //@ConcurrencyLimit(100)
     @Retryable(
             maxRetriesString = "${resilience.retry.partners.max-retries}",
             delayString = "${resilience.retry.partners.delay}"

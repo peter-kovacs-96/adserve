@@ -3,10 +3,10 @@
 # Requires: sudo apt install hey
 
 URL="http://localhost:8080/api/v1/ads/request"
-RATE=${1:-100}        # requests per second (default: 100)
-DURATION=${2:-5m}     # duration (default: 5 minutes)
-CONCURRENCY=${3:-10}  # concurrent workers (default: 10)
-WARMUP=${4:-20}       # warm-up requests (default: 20)
+RATE=${1:-1000}       # requests per second (default: 1000)
+DURATION=${2:-5m}     # duration (default: 1 minute)
+CONCURRENCY=${3:-100} # concurrent workers (default: 100)
+WARMUP=${4:-100}      # warm-up requests (default: 100)
 
 REQUEST_BODY='{"userId":"user-123","deviceType":"mobile","country":"USA"}'
 
