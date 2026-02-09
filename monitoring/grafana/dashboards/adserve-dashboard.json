@@ -109,12 +109,12 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(rate(http_server_requests_seconds_count{app=\"adserve\"}[1m]))",
+          "expr": "sum(rate(http_server_requests_seconds_count{app=\"adserve\", service=~\"ad-orchestration|ml-inference|partner-simulator\"}[1m]))",
           "legendFormat": "Total RPS",
           "refId": "A"
         }
       ],
-      "title": "Total Request Rate",
+      "title": "HTTP Request Rate",
       "type": "stat"
     },
     {
@@ -158,12 +158,12 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(rate(http_server_requests_seconds_count{app=\"adserve\", status=~\"5..\"}[1m])) / sum(rate(http_server_requests_seconds_count{app=\"adserve\"}[1m]))",
+          "expr": "sum(rate(http_server_requests_seconds_count{app=\"adserve\", service=~\"ad-orchestration|ml-inference|partner-simulator\", status=~\"5..\"}[1m])) / sum(rate(http_server_requests_seconds_count{app=\"adserve\", service=~\"ad-orchestration|ml-inference|partner-simulator\"}[1m]))",
           "legendFormat": "Error Rate",
           "refId": "A"
         }
       ],
-      "title": "Error Rate",
+      "title": "HTTP Error Rate",
       "type": "stat"
     },
     {
@@ -207,12 +207,12 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "histogram_quantile(0.50, sum(rate(http_server_requests_seconds_bucket{app=\"adserve\"}[1m])) by (le))",
+          "expr": "histogram_quantile(0.50, sum(rate(http_server_requests_seconds_bucket{app=\"adserve\", service=~\"ad-orchestration|ml-inference|partner-simulator\"}[1m])) by (le))",
           "legendFormat": "p50",
           "refId": "A"
         }
       ],
-      "title": "Latency p50",
+      "title": "HTTP Response Time p50",
       "type": "stat"
     },
     {
@@ -256,12 +256,12 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{app=\"adserve\"}[1m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{app=\"adserve\", service=~\"ad-orchestration|ml-inference|partner-simulator\"}[1m])) by (le))",
           "legendFormat": "p95",
           "refId": "A"
         }
       ],
-      "title": "Latency p95",
+      "title": "HTTP Response Time p95",
       "type": "stat"
     },
     {
@@ -305,12 +305,12 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "histogram_quantile(0.99, sum(rate(http_server_requests_seconds_bucket{app=\"adserve\"}[1m])) by (le))",
+          "expr": "histogram_quantile(0.99, sum(rate(http_server_requests_seconds_bucket{app=\"adserve\", service=~\"ad-orchestration|ml-inference|partner-simulator\"}[1m])) by (le))",
           "legendFormat": "p99",
           "refId": "A"
         }
       ],
-      "title": "Latency p99",
+      "title": "HTTP Response Time p99",
       "type": "stat"
     },
     {
@@ -375,12 +375,12 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(rate(http_server_requests_seconds_count{app=\"adserve\"}[1m])) by (service)",
+          "expr": "sum(rate(http_server_requests_seconds_count{app=\"adserve\", service=~\"ad-orchestration|ml-inference|partner-simulator\"}[1m])) by (service)",
           "legendFormat": "{{service}}",
           "refId": "A"
         }
       ],
-      "title": "Request Rate by Service",
+      "title": "HTTP Request Rate by Service",
       "type": "timeseries"
     },
     {
@@ -445,12 +445,12 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "sum(rate(http_server_requests_seconds_count{app=\"adserve\", status=~\"5..\"}[1m])) by (service)",
+          "expr": "sum(rate(http_server_requests_seconds_count{app=\"adserve\", service=~\"ad-orchestration|ml-inference|partner-simulator\", status=~\"5..\"}[1m])) by (service)",
           "legendFormat": "{{service}} 5xx",
           "refId": "A"
         }
       ],
-      "title": "Error Rate by Service (5xx)",
+      "title": "HTTP Errors by Service (5xx)",
       "type": "timeseries"
     },
     {
@@ -519,94 +519,24 @@
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "histogram_quantile(0.50, sum(rate(http_server_requests_seconds_bucket{app=\"adserve\"}[1m])) by (le, service))",
+          "expr": "histogram_quantile(0.50, sum(rate(http_server_requests_seconds_bucket{app=\"adserve\", service=~\"ad-orchestration|ml-inference|partner-simulator\"}[1m])) by (le, service))",
           "legendFormat": "{{service}} p50",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{app=\"adserve\"}[1m])) by (le, service))",
+          "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket{app=\"adserve\", service=~\"ad-orchestration|ml-inference|partner-simulator\"}[1m])) by (le, service))",
           "legendFormat": "{{service}} p95",
           "refId": "B"
         },
         {
           "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "histogram_quantile(0.99, sum(rate(http_server_requests_seconds_bucket{app=\"adserve\"}[1m])) by (le, service))",
+          "expr": "histogram_quantile(0.99, sum(rate(http_server_requests_seconds_bucket{app=\"adserve\", service=~\"ad-orchestration|ml-inference|partner-simulator\"}[1m])) by (le, service))",
           "legendFormat": "{{service}} p99",
           "refId": "C"
         }
       ],
-      "title": "Response Time p50/p95/p99 by Service",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "prometheus"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": { "type": "linear" },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": { "group": "A", "mode": "none" },
-            "thresholdsStyle": { "mode": "off" }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 11 },
-      "id": 6,
-      "options": {
-        "legend": {
-          "calcs": ["mean", "max"],
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": { "mode": "multi", "sort": "desc" }
-      },
-      "pluginVersion": "10.0.0",
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "prometheus" },
-          "expr": "http_server_requests_active_seconds_active_count{app=\"adserve\"}",
-          "legendFormat": "{{service}}",
-          "refId": "A"
-        }
-      ],
-      "title": "Active Requests",
+      "title": "HTTP Response Time by Service",
       "type": "timeseries"
     },
     {
@@ -663,6 +593,76 @@
       ],
       "title": "Service Status",
       "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": { "type": "linear" },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": { "group": "A", "mode": "none" },
+            "thresholdsStyle": { "mode": "off" }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 23 },
+      "id": 15,
+      "options": {
+        "legend": {
+          "calcs": ["mean", "max"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "pluginVersion": "10.0.0",
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "sum(rate(ad_auction_wins_total{app=\"adserve\"}[1m])) by (partner)",
+          "legendFormat": "{{partner}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Auction Wins by Partner",
+      "type": "timeseries"
     }
   ],
   "preload": false,

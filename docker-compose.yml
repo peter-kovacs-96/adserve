@@ -8,14 +8,16 @@ services:
     ports:
       - "8080:8080"
     environment:
-      - SPRING_APPLICATION_NAME=ad-orchestration
-      - SERVER_PORT=8080
-      - GRPC_CLIENT_USER_SERVICE_ADDRESS=user-service:9090
-      - GRPC_CLIENT_SEGMENT_SERVICE_ADDRESS=segment-service:9091
-      - GRPC_CLIENT_TARGETING_SERVICE_ADDRESS=targeting-service:9092
-      - HTTP_CLIENT_ML_INFERENCE_BASE_URL=http://ml-inference:8081
-      - HTTP_CLIENT_PARTNER_BASE_URL=http://partner-simulator:8082
-      - LOGGING_LEVEL_IO_ADSERVE=INFO
+      # HTTP Client - Docker hostnames override
+      - HTTP_CLIENT_GROUPS_MLINFERENCE=http://ml-inference:8081
+      - HTTP_CLIENT_GROUPS_NIKE=http://partner-simulator:8082/partners/nike
+      - HTTP_CLIENT_GROUPS_ADIDAS=http://partner-simulator:8082/partners/adidas
+      - HTTP_CLIENT_GROUPS_NORTHFACE=http://partner-simulator:8082/partners/northface
+
+      # gRPC - Docker hostnames override
+      - GRPC_CLIENT_USER_SERVICE_HOST=user-service
+      - GRPC_CLIENT_SEGMENT_SERVICE_HOST=segment-service
+      - GRPC_CLIENT_TARGETING_SERVICE_HOST=targeting-service
     depends_on:
       user-service:
         condition: service_healthy
@@ -32,7 +34,7 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 60s
+      start_period: 15s
     restart: unless-stopped
     networks:
       - adserve-network
@@ -59,7 +61,7 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 60s
+      start_period: 35s
     restart: unless-stopped
     networks:
       - adserve-network
@@ -86,7 +88,7 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 60s
+      start_period: 35s
     restart: unless-stopped
     networks:
       - adserve-network
@@ -113,7 +115,7 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 60s
+      start_period: 35s
     restart: unless-stopped
     networks:
       - adserve-network
@@ -139,7 +141,7 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 60s
+      start_period: 30s
     restart: unless-stopped
     networks:
       - adserve-network
@@ -165,7 +167,7 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
-      start_period: 60s
+      start_period: 30s
     restart: unless-stopped
     networks:
       - adserve-network
@@ -216,7 +218,7 @@ services:
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_AUTH_ANONYMOUS_ENABLED=true
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
-      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/etc/grafana/provisioning/dashboards/overview.json
+      - GF_DASHBOARDS_DEFAULT_HOME_DASHBOARD_PATH=/etc/grafana/provisioning/dashboards/adserve-dashboard.json
     volumes:
       - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
       - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro

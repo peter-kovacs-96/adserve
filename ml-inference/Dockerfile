@@ -16,12 +16,16 @@ USER adserve
 # HTTP port
 EXPOSE 8081
 
-ENV JAVA_OPTS="-Xms256m -Xmx256m \
+ENV JAVA_OPTS="-Xms272m -Xmx272m \
     -XX:+UseZGC \
+    -XX:ReservedCodeCacheSize=48m \
+    -XX:MaxMetaspaceSize=48m \
     --enable-preview \
+    -Djdk.tracePinnedThreads=short \
+    -Xlog:gc*:stdout:time,level,tags \
     -Djava.security.egd=file:/dev/./urandom"
 
-HEALTHCHECK --interval=30s --timeout=3s --start-period=60s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=3s --start-period=30s --retries=3 \
     CMD wget -qO- http://localhost:8081/actuator/health || exit 1
 
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]

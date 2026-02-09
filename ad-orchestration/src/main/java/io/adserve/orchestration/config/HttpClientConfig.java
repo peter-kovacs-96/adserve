@@ -1,44 +1,47 @@
 package io.adserve.orchestration.config;
 
 import io.adserve.orchestration.client.MlInferenceClient;
-import io.adserve.orchestration.client.PartnerClient;
-import org.springframework.beans.factory.annotation.Value;
+import io.adserve.orchestration.client.partner.*;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.web.client.RestClient;
-import org.springframework.web.client.support.RestClientAdapter;
-import org.springframework.web.service.invoker.HttpServiceProxyFactory;
+import org.springframework.http.client.JdkClientHttpRequestFactory;
+import org.springframework.resilience.annotation.EnableResilientMethods;
+import org.springframework.web.client.support.RestClientHttpServiceGroupConfigurer;
+import org.springframework.web.service.registry.ImportHttpServices;
 
+import java.net.http.HttpClient;
+import java.util.concurrent.Executors;
+
+@Slf4j
 @Configuration
+@EnableResilientMethods
+@EnableConfigurationProperties(HttpClientProperties.class)
+@ImportHttpServices(group = "nike", types = {NikeClient.class})
+@ImportHttpServices(group = "adidas", types = {AdidasClient.class})
+@ImportHttpServices(group = "northface", types = {NorthFaceClient.class})
+@ImportHttpServices(group = "mlinference", types = {MlInferenceClient.class})
 public class HttpClientConfig {
 
-    @Value("${http.client.ml-inference.base-url:http://localhost:8081}")
-    private String mlInferenceBaseUrl;
-
-    @Value("${http.client.partner.base-url:http://localhost:8082}")
-    private String partnerBaseUrl;
-
     @Bean
-    public MlInferenceClient mlInferenceClient() {
-        var restClient = RestClient.builder()
-                .baseUrl(mlInferenceBaseUrl)
+    RestClientHttpServiceGroupConfigurer httpServiceGroupConfigurer(HttpClientProperties properties) {
+        log.info("HTTP Client config: connectTimeout={}, readTimeout={}",
+                properties.connectTimeout(), properties.readTimeout());
+
+        // Single shared HttpClient for all groups
+        var httpClient = HttpClient.newBuilder()
+                .connectTimeout(properties.connectTimeout())
+                .executor(Executors.newVirtualThreadPerTaskExecutor())
                 .build();
 
-        var adapter = RestClientAdapter.create(restClient);
-        var factory = HttpServiceProxyFactory.builderFor(adapter).build();
+        return groups -> groups.forEachClient((group, builder) -> {
+            log.info("Configuring HTTP client for group: {} with baseUrl: {}",
+                    group.name(), properties.groups().get(group.name()));
 
-        return factory.createClient(MlInferenceClient.class);
-    }
-
-    @Bean
-    public PartnerClient partnerClient() {
-        var restClient = RestClient.builder()
-                .baseUrl(partnerBaseUrl)
-                .build();
-
-        var adapter = RestClientAdapter.create(restClient);
-        var factory = HttpServiceProxyFactory.builderFor(adapter).build();
-
-        return factory.createClient(PartnerClient.class);
+            var factory = new JdkClientHttpRequestFactory(httpClient);
+            factory.setReadTimeout(properties.readTimeout());
+            builder.baseUrl(properties.groups().get(group.name())).requestFactory(factory);
+        });
     }
 }
