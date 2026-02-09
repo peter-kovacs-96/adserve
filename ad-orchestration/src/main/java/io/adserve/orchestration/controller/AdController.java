@@ -2,8 +2,7 @@ package io.adserve.orchestration.controller;
 
 import io.adserve.orchestration.client.MlInferenceClient;
 import io.adserve.orchestration.client.partner.PartnerClientRegistry;
-import io.adserve.orchestration.metrics.BottleneckMetrics;
-import io.adserve.orchestration.metrics.BusinessMetrics;
+import io.adserve.orchestration.metrics.AdMetrics;
 import io.adserve.segment.grpc.GetSegmentsRequest;
 import io.adserve.segment.grpc.GetSegmentsResponse;
 import io.adserve.segment.grpc.Segment;
@@ -36,8 +35,7 @@ public class AdController {
     private final TargetingServiceGrpc.TargetingServiceBlockingStub targetingServiceStub;
     private final MlInferenceClient mlInferenceClient;
     private final PartnerClientRegistry partnerClientRegistry;
-    private final BusinessMetrics businessMetrics;
-    private final BottleneckMetrics bottleneckMetrics;
+    private final AdMetrics adMetrics;
 
     public AdController(
             UserServiceGrpc.UserServiceBlockingStub userServiceStub,
@@ -45,15 +43,13 @@ public class AdController {
             TargetingServiceGrpc.TargetingServiceBlockingStub targetingServiceStub,
             MlInferenceClient mlInferenceClient,
             PartnerClientRegistry partnerClientRegistry,
-            BusinessMetrics businessMetrics,
-            BottleneckMetrics bottleneckMetrics) {
+            AdMetrics adMetrics) {
         this.userServiceStub = userServiceStub;
         this.segmentServiceStub = segmentServiceStub;
         this.targetingServiceStub = targetingServiceStub;
         this.mlInferenceClient = mlInferenceClient;
         this.partnerClientRegistry = partnerClientRegistry;
-        this.businessMetrics = businessMetrics;
-        this.bottleneckMetrics = bottleneckMetrics;
+        this.adMetrics = adMetrics;
     }
 
     @PostMapping("/request")
@@ -63,12 +59,8 @@ public class AdController {
         var traceId = UUID.randomUUID().toString();
         var userId = request.userId() != null ? request.userId() : "unknown";
 
-        businessMetrics.incrementRequestsTotal();
-        bottleneckMetrics.incrementActiveRequests();
-
         try (var scope = StructuredTaskScope.open(StructuredTaskScope.Joiner.awaitAllSuccessfulOrThrow())) {
 
-            var internalStart = Instant.now();
             var userTask = scope.fork(() -> callUserService(userId, traceId, requestId));
             var segmentTask = scope.fork(() -> callSegmentService(userId, traceId, requestId));
             var targetingTask = scope.fork(() -> callTargetingService(userId, traceId, requestId));
@@ -78,25 +70,13 @@ public class AdController {
             var segmentResponse = segmentTask.get();
             var targetingResponse = targetingTask.get();
 
-            var internalDuration = Duration.between(internalStart, Instant.now());
-            bottleneckMetrics.recordPhaseInternal(internalDuration);
-
-            var mlStart = Instant.now();
             var mlPrediction = callMlService(userId, traceId, segmentResponse);
-            var mlDuration = Duration.between(mlStart, Instant.now());
-            bottleneckMetrics.recordPhaseMl(mlDuration);
 
-            var partnerStart = Instant.now();
             var auctionResult = runAuction(requestId, traceId);
-            var partnerDuration = Duration.between(partnerStart, Instant.now());
-            bottleneckMetrics.recordPhasePartner(partnerDuration);
 
-            businessMetrics.recordAuctionWin(auctionResult.winnerId());
+            adMetrics.recordAuctionWin(auctionResult.winnerId());
 
             var processingTime = Duration.between(startTime, Instant.now());
-            businessMetrics.recordRequestDuration(processingTime);
-            businessMetrics.incrementRequestsSuccess();
-            bottleneckMetrics.decrementActiveRequests();
 
             log.info("Ad request completed | requestId={} | traceId={} | totalMs={} | winner={} | price=${}",
                     requestId, traceId, processingTime.toMillis(),
@@ -107,9 +87,6 @@ public class AdController {
 
         } catch (Exception e) {
             var processingTime = Duration.between(startTime, Instant.now());
-            businessMetrics.recordRequestDuration(processingTime);
-            businessMetrics.incrementRequestsError();
-            bottleneckMetrics.decrementActiveRequests();
             log.error("Ad request failed | requestId={} | traceId={} | timeMs={} | error={}",
                     requestId, traceId, processingTime.toMillis(), e.getMessage(), e);
             throw new RuntimeException("Ad request failed: " + e.getMessage(), e);

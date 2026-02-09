@@ -7,12 +7,7 @@ import java.util.Map;
 
 @ConfigurationProperties(prefix = "http.client")
 public record HttpClientProperties(
-        ServiceConfig mlInference,
-        Map<String, ServiceConfig> partners
-) {
-    public record ServiceConfig(
-            String baseUrl,
-            Duration connectTimeout,
-            Duration readTimeout
-    ) {}
-}
+        Duration connectTimeout,
+        Duration readTimeout,
+        Map<String, String> groups
+) {}

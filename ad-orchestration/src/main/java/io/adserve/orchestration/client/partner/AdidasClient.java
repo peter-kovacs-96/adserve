@@ -1,8 +1,6 @@
 package io.adserve.orchestration.client.partner;
 
-import io.github.resilience4j.bulkhead.annotation.Bulkhead;
-import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
-import io.github.resilience4j.retry.annotation.Retry;
+import org.springframework.resilience.annotation.Retryable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.service.annotation.HttpExchange;
 import org.springframework.web.service.annotation.PostExchange;
@@ -14,8 +12,10 @@ public interface AdidasClient extends PartnerBidClient {
 
     @Override
     @PostExchange("/bid")
-    @CircuitBreaker(name = "adidas")
-    @Bulkhead(name = "adidas")
-    @Retry(name = "adidas")
+    //@ConcurrencyLimit(100)
+    @Retryable(
+            maxRetriesString = "${resilience.retry.partners.max-retries}",
+            delayString = "${resilience.retry.partners.delay}"
+    )
     Map<String, Object> bid(@RequestBody Map<String, Object> request);
 }

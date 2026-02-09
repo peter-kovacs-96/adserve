@@ -3,10 +3,10 @@
 # Requires: sudo apt install hey
 
 URL="http://localhost:8080/api/v1/ads/request"
-RATE=${1:-100}        # requests per second (default: 100)
-DURATION=${2:-5m}     # duration (default: 5 minutes)
-CONCURRENCY=${3:-10}  # concurrent workers (default: 10)
-WARMUP=${4:-200}      # warm-up requests (default: 200)
+RATE=${1:-1000}       # requests per second (default: 1000)
+DURATION=${2:-5m}     # duration (default: 1 minute)
+CONCURRENCY=${3:-100} # concurrent workers (default: 100)
+WARMUP=${4:-100}      # warm-up requests (default: 100)
 
 REQUEST_BODY='{"userId":"user-123","deviceType":"mobile","country":"USA"}'
 
@@ -35,3 +35,10 @@ hey -z "$DURATION" -q "$RATE" -c "$CONCURRENCY" -m POST \
   -H "Content-Type: application/json" \
   -d "$REQUEST_BODY" \
   "$URL"
+
+# Find slow requests in logs (>150ms)
+echo ""
+echo "=== Slow Requests (>150ms) from logs ==="
+docker logs ad-orchestration 2>&1 | grep "Ad request completed" | \
+  sed -n 's/.*requestId=\([^ ]*\).*totalMs=\([0-9]*\).*/\2ms requestId=\1/p' | \
+  awk '$1+0 > 150' | sort -rn | head -20
