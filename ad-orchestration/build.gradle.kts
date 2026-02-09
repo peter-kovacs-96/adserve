@@ -15,17 +15,12 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-validation")
     implementation("org.springframework.boot:spring-boot-starter-actuator")
 
-    // Manual gRPC (Legacy Style)
-    implementation("io.grpc:grpc-netty-shaded:$grpcVersion")
-    implementation("io.grpc:grpc-protobuf:$grpcVersion")
-    implementation("io.grpc:grpc-stub:$grpcVersion")
-    implementation("com.google.protobuf:protobuf-java:$protobufVersion")
+    // Spring gRPC
+    implementation("org.springframework.grpc:spring-grpc-spring-boot-starter")
 
     // Observability (Trace IDs for Virtual Threads)
     implementation("io.micrometer:micrometer-registry-prometheus")
     runtimeOnly("io.micrometer:micrometer-tracing-bridge-otel")
-
-    compileOnly("org.apache.tomcat:annotations-api:6.0.53")
 }
 
 dependencyManagement {

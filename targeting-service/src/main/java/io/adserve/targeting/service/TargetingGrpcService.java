@@ -2,11 +2,11 @@ package io.adserve.targeting.service;
 
 import io.adserve.targeting.grpc.*;
 import io.grpc.stub.StreamObserver;
-import net.devh.boot.grpc.server.service.GrpcService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
 
-@GrpcService
+@Service
 public class TargetingGrpcService extends TargetingServiceGrpc.TargetingServiceImplBase {
 
     private static final Logger log = LoggerFactory.getLogger(TargetingGrpcService.class);

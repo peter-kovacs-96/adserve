@@ -12,17 +12,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("io.micrometer:micrometer-registry-prometheus")
 
-    // gRPC
-    implementation("io.grpc:grpc-netty-shaded:$grpcVersion")
-    implementation("io.grpc:grpc-protobuf:$grpcVersion")
-    implementation("io.grpc:grpc-stub:$grpcVersion")
-    implementation("com.google.protobuf:protobuf-java:$protobufVersion")
-
-    // gRPC Spring Boot Starter
-    implementation("net.devh:grpc-spring-boot-starter:3.1.0.RELEASE")
-
-    // Required for generated code
-    compileOnly("org.apache.tomcat:annotations-api:6.0.53")
+    implementation("org.springframework.grpc:spring-grpc-spring-boot-starter")
 }
 
 sourceSets {

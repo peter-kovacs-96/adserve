@@ -10,7 +10,7 @@ AdServe orchestrates parallel service calls, real-time ML predictions, and deman
 - Structured concurrency with Virtual Threads and `StructuredTaskScope`
 - Spring Framework native resilience (`@Retryable`, `@ConcurrencyLimit`)
 - HTTP Service Registry with `@ImportHttpServices` for declarative HTTP client management
-- gRPC for internal service communication, OpenRTB 2.6 for partner bidding
+- Spring gRPC (`@ImportGrpcClients`) for internal service communication, OpenRTB 2.6 for partner bidding
 - Prometheus + Grafana observability
 
 ## Architecture
@@ -74,7 +74,7 @@ graph TB
 | Language | Java (preview features enabled) | Virtual Threads, `StructuredTaskScope` |
 | Framework | Spring Boot / Spring Framework | REST API, dependency injection, resilience |
 | Build | Gradle (Kotlin DSL) | Multi-module project management |
-| Internal RPC | gRPC + Protocol Buffers | High-performance service-to-service communication |
+| Internal RPC | Spring gRPC + Protocol Buffers | High-performance service-to-service communication with auto-configured channels and stubs |
 | HTTP Clients | Spring HTTP Service Registry (`@ImportHttpServices`) | Declarative HTTP client proxies grouped by service |
 | RTB Protocol | OpenRTB 2.6 | Industry-standard bid request/response format |
 | Resilience | Spring native (`@Retryable`, `@ConcurrencyLimit`) | Retry, concurrency limiting on method invocations |
@@ -88,6 +88,7 @@ graph TB
 The central orchestrator and the service we own. Receives ad requests, coordinates all backend calls using structured concurrency, runs the auction, and returns the winning ad. Key design decisions:
 
 - **Structured concurrency**: Phase 1 (internal services) uses `awaitAllSuccessfulOrThrow` - if any internal service fails, the entire scope fails fast. Phase 3 (partner bidding) uses `allSuccessfulOrThrow` with timeout tolerance - partial bid results are accepted.
+- **Spring gRPC clients**: Internal service stubs are auto-configured via `@ImportGrpcClients`, with named channels configured in `application.properties`. No manual channel or stub management needed.
 - **HTTP Service Registry**: Partner and ML clients are declared as `@HttpExchange` interfaces, organized into groups via `@ImportHttpServices`, and configured through a single `RestClientHttpServiceGroupConfigurer`. The underlying `HttpClient` uses a Virtual Thread executor.
 - **Timeout strategy**: HTTP connect/read timeouts are configured to be shorter than the `StructuredTaskScope` timeout. This ensures `scope.close()` does not block waiting for HTTP calls, which would cause latency spikes.
 - **Resilience**: Spring Framework native `@Retryable` on HTTP service methods with configurable retry count, delay, and back-off. `@ConcurrencyLimit` available for concurrency throttling. All settings are externalized in `application.properties`.
