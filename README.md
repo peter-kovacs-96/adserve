@@ -92,7 +92,7 @@ The central orchestrator and the service we own. Receives ad requests, coordinat
 - **HTTP Service Registry**: Partner and ML clients are declared as `@HttpExchange` interfaces, organized into groups via `@ImportHttpServices`, and configured through a single `RestClientHttpServiceGroupConfigurer`. The underlying `HttpClient` uses a Virtual Thread executor.
 - **Timeout strategy**: HTTP connect/read timeouts are configured to be shorter than the `StructuredTaskScope` timeout. This ensures `scope.close()` does not block waiting for HTTP calls, which would cause latency spikes.
 - **Resilience**: Spring Framework native `@Retryable` on HTTP service methods with configurable retry count, delay, and back-off. `@ConcurrencyLimit` available for concurrency throttling. All settings are externalized in `application.properties`.
-- **Observability**: Prometheus metrics via Micrometer, distributed tracing with OpenTelemetry bridge, custom auction-win counters. All services propagate trace and request IDs.
+- **Observability**: Prometheus metrics via Micrometer, custom auction-win counters. All services propagate trace and request IDs. Actuator endpoints are isolated on a separate management port to keep the business port dedicated to serving requests.
 
 ### Mock / Simulator Services
 
@@ -106,11 +106,24 @@ These services exist to provide a realistic environment for ad-orchestration. Th
 | **ml-inference** | 8081 | REST | Returns mock CTR/CVR predictions with random variation |
 | **partner-simulator** | 8082 | REST | Simulates 10 demand partners returning OpenRTB 2.6 bid responses with randomized prices and simulated network latency |
 
+### Management Ports
+
+Each service runs actuator endpoints on a dedicated management port, isolated from business traffic. Prometheus scrapes these management ports.
+
+| Service | Business Port | Management Port |
+|---------|--------------|-----------------|
+| **ad-orchestration** | 8080 | 8090 |
+| **user-service** | 9001 (HTTP) / 9090 (gRPC) | 9011 |
+| **segment-service** | 9002 (HTTP) / 9091 (gRPC) | 9012 |
+| **targeting-service** | 9003 (HTTP) / 9092 (gRPC) | 9013 |
+| **ml-inference** | 8081 | 8091 |
+| **partner-simulator** | 8082 | 8092 |
+
 ### Monitoring
 
 | Service | Port | Purpose |
 |---------|------|---------|
-| **Prometheus** | 9090 | Scrapes `/actuator/prometheus` from all services |
+| **Prometheus** | 9090 | Scrapes `/actuator/prometheus` from management ports |
 | **Grafana** | 3001 | Dashboards for ad-orchestration metrics (default credentials: admin/admin) |
 
 ## Quick Start
@@ -163,8 +176,11 @@ adserve/
 
 ## API
 
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/v1/ads/request` | POST | Serve an ad request |
-| `/actuator/health` | GET | Health check (all services) |
-| `/actuator/prometheus` | GET | Prometheus metrics (all services) |
+| Endpoint | Port | Method | Description |
+|----------|------|--------|-------------|
+| `/api/v1/ads/request` | Business | POST | Serve an ad request |
+| `/livez` | Business | GET | Lightweight liveness probe |
+| `/readyz` | Business | GET | Lightweight readiness probe |
+| `/actuator/health` | Management | GET | Detailed health with components |
+| `/actuator/prometheus` | Management | GET | Prometheus metrics |
+| `/actuator/info` | Management | GET | Application info |

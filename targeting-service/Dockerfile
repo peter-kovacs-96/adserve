@@ -13,8 +13,8 @@ RUN chown -R adserve:adserve /app
 
 USER adserve
 
-# gRPC port
-EXPOSE 9092
+# gRPC and management ports
+EXPOSE 9092 9013
 
 ENV JAVA_OPTS="-Xms256m -Xmx256m \
     -XX:+UseZGC \
@@ -26,6 +26,6 @@ ENV JAVA_OPTS="-Xms256m -Xmx256m \
     -Djava.security.egd=file:/dev/./urandom"
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=35s --retries=3 \
-    CMD wget -qO- http://localhost:9003/actuator/health || exit 1
+    CMD wget -qO- http://localhost:9003/livez || exit 1
 
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]
