@@ -18,9 +18,8 @@ dependencies {
     // Spring gRPC
     implementation("org.springframework.grpc:spring-grpc-spring-boot-starter")
 
-    // Observability (Trace IDs for Virtual Threads)
+    // Observability
     implementation("io.micrometer:micrometer-registry-prometheus")
-    runtimeOnly("io.micrometer:micrometer-tracing-bridge-otel")
 }
 
 dependencyManagement {

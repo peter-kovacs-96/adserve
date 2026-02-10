@@ -17,8 +17,8 @@ RUN chown -R adserve:adserve /app
 # Switch to non-root user
 USER adserve
 
-# Expose port
-EXPOSE 8080
+# Expose business and management ports
+EXPOSE 8080 8090
 
 # JVM settings with preview features enabled
 ENV JAVA_OPTS="-Xms416m -Xmx416m \
@@ -30,8 +30,8 @@ ENV JAVA_OPTS="-Xms416m -Xmx416m \
     -Xlog:gc*:stdout:time,level,tags \
     -Djava.security.egd=file:/dev/./urandom"
 
-# Health check
+# Health check (lightweight liveness probe on main port)
 HEALTHCHECK --interval=30s --timeout=3s --start-period=15s --retries=3 \
-    CMD wget -qO- http://localhost:8080/actuator/health || exit 1
+    CMD wget -qO- http://localhost:8080/livez || exit 1
 
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]

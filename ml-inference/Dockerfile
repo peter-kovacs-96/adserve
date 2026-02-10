@@ -13,8 +13,8 @@ RUN chown -R adserve:adserve /app
 
 USER adserve
 
-# HTTP port
-EXPOSE 8081
+# HTTP and management ports
+EXPOSE 8081 8091
 
 ENV JAVA_OPTS="-Xms272m -Xmx272m \
     -XX:+UseZGC \
@@ -26,6 +26,6 @@ ENV JAVA_OPTS="-Xms272m -Xmx272m \
     -Djava.security.egd=file:/dev/./urandom"
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=30s --retries=3 \
-    CMD wget -qO- http://localhost:8081/actuator/health || exit 1
+    CMD wget -qO- http://localhost:8081/livez || exit 1
 
 ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar app.jar"]

@@ -66,7 +66,7 @@ FROM base AS training
 RUN java -XX:AOTMode=record -XX:AOTConfiguration=app.aotconf \
          -jar app.jar &  \
     sleep 15 && \
-    wget -qO- http://localhost:8081/actuator/health && \
+    wget -qO- http://localhost:8081/livez && \
     wget -qO /dev/null -post-data '{"userId":"warmup","traceId":"aot"}' \
          --header='Content-Type: application/json' \
          http://localhost:8081/api/v1/predict && \
@@ -81,7 +81,7 @@ RUN java -XX:AOTMode=create \
 FROM base AS production
 COPY --from=training /app/app.aot app.aot
 
-EXPOSE 8081
+EXPOSE 8081 8091
 ENV JAVA_OPTS="-Xms272m -Xmx272m \
     -XX:+UseZGC \
     -XX:ReservedCodeCacheSize=48m \
@@ -92,7 +92,7 @@ ENV JAVA_OPTS="-Xms272m -Xmx272m \
     -Djava.security.egd=file:/dev/./urandom"
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=60s --retries=3 \
-    CMD wget -qO- http://localhost:8081/actuator/health || exit 1
+    CMD wget -qO- http://localhost:8081/livez || exit 1
 
 ENTRYPOINT ["sh", "-c", "java -XX:AOTCache=app.aot $JAVA_OPTS -jar app.jar"]
 ```
