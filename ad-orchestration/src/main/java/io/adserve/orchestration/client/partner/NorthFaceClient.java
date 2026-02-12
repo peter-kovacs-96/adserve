@@ -1,11 +1,11 @@
 package io.adserve.orchestration.client.partner;
 
+import io.adserve.orchestration.openrtb.BidRequest;
+import io.adserve.orchestration.openrtb.BidResponse;
 import org.springframework.resilience.annotation.Retryable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.service.annotation.HttpExchange;
 import org.springframework.web.service.annotation.PostExchange;
-
-import java.util.Map;
 
 @HttpExchange
 public interface NorthFaceClient extends PartnerBidClient {
@@ -17,5 +17,5 @@ public interface NorthFaceClient extends PartnerBidClient {
             maxRetriesString = "${resilience.retry.partners.max-retries}",
             delayString = "${resilience.retry.partners.delay}"
     )
-    Map<String, Object> bid(@RequestBody Map<String, Object> request);
+    BidResponse bid(@RequestBody BidRequest request);
 }

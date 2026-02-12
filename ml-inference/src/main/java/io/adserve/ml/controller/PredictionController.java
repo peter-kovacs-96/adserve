@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.Map;
+import java.util.List;
 import java.util.concurrent.ThreadLocalRandom;
 
 @RestController
@@ -17,27 +17,30 @@ public class PredictionController {
     private static final Logger log = LoggerFactory.getLogger(PredictionController.class);
 
     @PostMapping("/predict")
-    public Map<String, Object> predict(@RequestBody Map<String, Object> request) {
-        var userId = request.getOrDefault("userId", "unknown");
-        var traceId = request.getOrDefault("traceId", "");
-
-        log.info("Prediction request received - userId: {}, traceId: {}", userId, traceId);
+    public PredictionResponse predict(@RequestBody PredictionRequest request) {
+        log.info("Prediction request received - userId: {}, traceId: {}", request.userId(), request.traceId());
 
         // Base values with small random variation
         var random = ThreadLocalRandom.current();
-        var ctr = 0.02 + random.nextDouble(0.01, 0.03);
-        var cvr = 0.005 + random.nextDouble(0.003, 0.008);
-
-        var response = Map.of(
-                "ctr", Math.round(ctr * 1000.0) / 1000.0,
-                "cvr", Math.round(cvr * 1000.0) / 1000.0,
-                "modelVersion", "v1.0.0",
-                "traceId", traceId
-        );
+        var ctr = Math.round((0.02 + random.nextDouble(0.01, 0.03)) * 1000.0) / 1000.0;
+        var cvr = Math.round((0.005 + random.nextDouble(0.003, 0.008)) * 1000.0) / 1000.0;
 
         log.info("Prediction response - userId: {}, ctr: {}, cvr: {}, traceId: {}",
-                userId, response.get("ctr"), response.get("cvr"), traceId);
+                request.userId(), ctr, cvr, request.traceId());
 
-        return response;
+        return new PredictionResponse(ctr, cvr, "v1.0.0", request.traceId());
     }
+
+    public record PredictionRequest(
+            String userId,
+            String traceId,
+            List<String> segments
+    ) {}
+
+    public record PredictionResponse(
+            double ctr,
+            double cvr,
+            String modelVersion,
+            String traceId
+    ) {}
 }
