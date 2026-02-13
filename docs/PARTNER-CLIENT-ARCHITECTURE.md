@@ -52,8 +52,23 @@ The timeout hierarchy:
 2. **HTTP read timeout** - fails if the target is slow to respond
 3. **StructuredTaskScope timeout** (longest) - overall deadline for the parallel execution phase
 
+## OpenRTB 2.6 Typed Model
+
+All partner communication uses typed Java records matching the OpenRTB 2.6 specification (`io.adserve.orchestration.openrtb` package). Key design decisions:
+
+- **`@JsonInclude(NON_NULL)`** on all records — OpenRTB requires omitting absent fields, not sending `null`
+- **Boxed `Integer`/`Double`** for optional numeric fields — primitive `int` serializes as `0`, boxed `Integer` is omitted when null (critical: `"coppa": 0` means "does not apply", absent means "unknown")
+- **`@JsonProperty`** only where Java naming differs from spec (`us_privacy` → `usPrivacy`, `deal_id` → `dealId`)
+- **No `ext` fields** — extension objects skipped until a specific DSP requires them
+
+Records cover the full request/response chain: `BidRequest` → `Imp`, `Banner`, `Format`, `Site`, `Publisher`, `Device`, `Geo`, `User`, `Data`, `Segment`, `Source`, `Schain`, `SchainNode`, `Regs` | `BidResponse` → `SeatBid`, `Bid`.
+
+The partner-simulator returns `Map<String, Object>` — Jackson transparently deserializes this into the typed `BidResponse` records on the ad-orchestration side. No shared module is needed.
+
+ML inference uses separate typed records (`MlPredictionRequest`/`MlPredictionResponse`) in the `client` package — not OpenRTB, internal protocol.
+
 ## Partner Client Registry
 
-Partner clients all implement a common `PartnerBidClient` interface. A `PartnerClientRegistry` bean collects all implementations and provides lookup by partner ID, allowing the auction loop to iterate over partners dynamically.
+Partner clients all implement a common `PartnerBidClient` interface with a typed contract: `BidResponse bid(BidRequest request)`. A `PartnerClientRegistry` bean collects all implementations and provides lookup by partner ID, allowing the auction loop to iterate over partners dynamically.
 
 Each partner has its own `@HttpExchange` interface (extending `PartnerBidClient`) and its own HTTP service group, enabling per-partner base URL and timeout configuration.

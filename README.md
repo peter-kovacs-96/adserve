@@ -10,7 +10,8 @@ AdServe orchestrates parallel service calls, real-time ML predictions, and deman
 - Structured concurrency with Virtual Threads and `StructuredTaskScope`
 - Spring Framework native resilience (`@Retryable`, `@ConcurrencyLimit`)
 - HTTP Service Registry with `@ImportHttpServices` for declarative HTTP client management
-- Spring gRPC (`@ImportGrpcClients`) for internal service communication, OpenRTB 2.6 for partner bidding
+- Spring gRPC (`@ImportGrpcClients`) for internal service communication
+- Typed OpenRTB 2.6 model — Java records for bid requests/responses with `@JsonInclude(NON_NULL)` and spec-compliant field names
 - Prometheus + Grafana observability
 
 ## Architecture
@@ -76,7 +77,7 @@ graph TB
 | Build | Gradle (Kotlin DSL) | Multi-module project management |
 | Internal RPC | Spring gRPC + Protocol Buffers | High-performance service-to-service communication with auto-configured channels and stubs |
 | HTTP Clients | Spring HTTP Service Registry (`@ImportHttpServices`) | Declarative HTTP client proxies grouped by service |
-| RTB Protocol | OpenRTB 2.6 | Industry-standard bid request/response format |
+| RTB Protocol | OpenRTB 2.6 (typed Java records) | Industry-standard bid request/response format with compile-time safety |
 | Resilience | Spring native (`@Retryable`, `@ConcurrencyLimit`) | Retry, concurrency limiting on method invocations |
 | Monitoring | Prometheus + Grafana | Metrics collection and dashboards |
 | Runtime | ZGC (Generational) | Low-latency garbage collection |
@@ -160,6 +161,12 @@ Start each service with `./gradlew :<service-name>:bootRun` in separate terminal
 ```
 adserve/
 ├── ad-orchestration/       # Main orchestrator service (REST API)
+│   └── src/main/java/io/adserve/orchestration/
+│       ├── openrtb/        # OpenRTB 2.6 typed model (BidRequest, BidResponse, Imp, etc.)
+│       ├── client/         # HTTP clients (partners, ML inference) + typed request/response records
+│       ├── controller/     # AdController — builds BidRequest, runs typed auction
+│       ├── config/         # HTTP client and gRPC configuration
+│       └── metrics/        # Prometheus metrics
 ├── user-service/           # Mock gRPC user profile service
 ├── segment-service/        # Mock gRPC segment service
 ├── targeting-service/      # Mock gRPC targeting service
