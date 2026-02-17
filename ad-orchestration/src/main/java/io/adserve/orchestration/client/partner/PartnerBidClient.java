@@ -1,11 +1,12 @@
 package io.adserve.orchestration.client.partner;
 
-
-import java.util.Map;
+import io.adserve.orchestration.openrtb.BidRequest;
+import io.adserve.orchestration.openrtb.BidResponse;
 
 /**
- * Common contract remains the same.
+ * Common contract for all demand partner clients.
+ * Accepts an OpenRTB 2.6 BidRequest and returns a BidResponse.
  */
 public interface PartnerBidClient {
-    Map<String, Object> bid(Map<String, Object> request);
+    BidResponse bid(BidRequest request);
 }

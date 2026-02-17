@@ -52,8 +52,55 @@ The timeout hierarchy:
 2. **HTTP read timeout** - fails if the target is slow to respond
 3. **StructuredTaskScope timeout** (longest) - overall deadline for the parallel execution phase
 
+## OpenRTB 2.6 Typed Model
+
+All partner communication uses typed Java records matching the OpenRTB 2.6 specification (`io.adserve.orchestration.openrtb` package). Key design decisions:
+
+- **`@JsonInclude(NON_NULL)`** on all records — OpenRTB requires omitting absent fields, not sending `null`
+- **Boxed `Integer`/`Double`** for optional numeric fields — primitive `int` serializes as `0`, boxed `Integer` is omitted when null (critical: `"coppa": 0` means "does not apply", absent means "unknown")
+- **`@JsonProperty`** only where Java naming differs from spec (`us_privacy` → `usPrivacy`, `deal_id` → `dealId`)
+- **No `ext` fields** — extension objects skipped until a specific DSP requires them
+
+Records cover the full request/response chain: `BidRequest` → `Imp`, `Banner`, `Format`, `Site`, `App`, `Publisher`, `Device`, `Geo`, `User`, `Data`, `Segment`, `Source`, `Schain`, `SchainNode`, `Regs` | `BidResponse` → `SeatBid`, `Bid`.
+
+`BidRequestBuilder` assembles the `BidRequest` from multiple sources: `AdRequest` (SDK-facing contract with impression specs, site/app context, device context + geo, user identity/consent/demographics, regulations, and auction controls), HTTP headers (`User-Agent`, `X-Forwarded-For`), gRPC service responses (user demographics for country/region, audience segments), and server-side config (publisher identity, supply chain, auction type). Since we own the SDK, it always sends all required and recommended fields per OpenRTB 2.6. The builder maps every field through with no null values — the only nullable fields in the `BidRequest` are `site`/`app` (mutually exclusive per spec).
+
+The partner-simulator returns `Map<String, Object>` — Jackson transparently deserializes this into the typed `BidResponse` records on the ad-orchestration side. No shared module is needed.
+
+ML inference uses separate typed records (`MlPredictionRequest`/`MlPredictionResponse`) in the `client` package — not OpenRTB, internal protocol.
+
 ## Partner Client Registry
 
-Partner clients all implement a common `PartnerBidClient` interface. A `PartnerClientRegistry` bean collects all implementations and provides lookup by partner ID, allowing the auction loop to iterate over partners dynamically.
+Partner clients all implement a common `PartnerBidClient` interface with a typed contract: `BidResponse bid(BidRequest request)`. A `PartnerClientRegistry` bean collects all implementations and provides lookup by partner ID, allowing the auction loop to iterate over partners dynamically.
 
 Each partner has its own `@HttpExchange` interface (extending `PartnerBidClient`) and its own HTTP service group, enabling per-partner base URL and timeout configuration.
+
+## Bid Validation
+
+Before entering the auction, each bid is validated by `BidValidator` against the original `BidRequest`:
+
+1. **Impression match** — `bid.impid` must reference an impression from the request
+2. **Bid floor** — bid price must meet or exceed the impression's `bidfloor`
+3. **Blocked advertisers** — `bid.adomain` must not appear in `BidRequest.badv`
+
+Invalid bids are rejected silently (logged at DEBUG level) and counted via the `ad_auction_invalid_bids` metric. This prevents malformed or non-compliant bids from entering the auction.
+
+## Auction Notifications
+
+After the auction, `NotificationService` fires async HTTP GET calls to notify bidders of the outcome:
+
+- **Win notice** (`nurl`) — sent to the auction winner with the winning price
+- **Loss notice** (`lurl`) — sent to each losing bidder with loss reason code `102` (lost to higher bid)
+
+Notifications use a dedicated `HttpClient` backed by Virtual Threads. They are fire-and-forget with short timeouts (500ms connect, 2s total) and no retries. Macro placeholders in URLs (`${AUCTION_ID}`, `${AUCTION_PRICE}`, etc.) are substituted by `AuctionMacros` before the call.
+
+**Billing notice** (`burl`) is not yet implemented — it requires client-side integration to detect when the ad creative actually renders.
+
+## Metrics
+
+| Metric | Tags | Description |
+|--------|------|-------------|
+| `ad_auction_wins` | `partner` | Auction wins per partner |
+| `ad_auction_nobids` | `partner`, `reason` | No-bid responses with OpenRTB reason code |
+| `ad_auction_invalid_bids` | `partner` | Bids rejected by validation |
+| `ad_notifications` | `type` (win/loss), `status` (ok/failed) | Notification delivery success/failure |

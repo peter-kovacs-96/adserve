@@ -9,5 +9,11 @@ import java.util.Map;
 public record HttpClientProperties(
         Duration connectTimeout,
         Duration readTimeout,
-        Map<String, String> groups
-) {}
+        Map<String, String> groups,
+        NotificationProperties notification
+) {
+    public record NotificationProperties(
+            Duration connectTimeout,
+            Duration readTimeout
+    ) {}
+}

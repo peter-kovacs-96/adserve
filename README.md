@@ -10,7 +10,8 @@ AdServe orchestrates parallel service calls, real-time ML predictions, and deman
 - Structured concurrency with Virtual Threads and `StructuredTaskScope`
 - Spring Framework native resilience (`@Retryable`, `@ConcurrencyLimit`)
 - HTTP Service Registry with `@ImportHttpServices` for declarative HTTP client management
-- Spring gRPC (`@ImportGrpcClients`) for internal service communication, OpenRTB 2.6 for partner bidding
+- Spring gRPC (`@ImportGrpcClients`) for internal service communication
+- Typed OpenRTB 2.6 model — Java records for bid requests/responses with `@JsonInclude(NON_NULL)` and spec-compliant field names
 - Prometheus + Grafana observability
 
 ## Architecture
@@ -76,7 +77,7 @@ graph TB
 | Build | Gradle (Kotlin DSL) | Multi-module project management |
 | Internal RPC | Spring gRPC + Protocol Buffers | High-performance service-to-service communication with auto-configured channels and stubs |
 | HTTP Clients | Spring HTTP Service Registry (`@ImportHttpServices`) | Declarative HTTP client proxies grouped by service |
-| RTB Protocol | OpenRTB 2.6 | Industry-standard bid request/response format |
+| RTB Protocol | OpenRTB 2.6 (typed Java records) | Industry-standard bid request/response format with compile-time safety |
 | Resilience | Spring native (`@Retryable`, `@ConcurrencyLimit`) | Retry, concurrency limiting on method invocations |
 | Monitoring | Prometheus + Grafana | Metrics collection and dashboards |
 | Runtime | ZGC (Generational) | Low-latency garbage collection |
@@ -139,7 +140,48 @@ Each service runs actuator endpoints on a dedicated management port, isolated fr
 docker-compose up --build
 ```
 
-Test the API by sending a POST request to `http://localhost:8080/api/v1/ads/request` with a JSON body containing `userId`, `deviceType`, and `context` fields.
+Test the API:
+
+```bash
+curl -s -X POST http://localhost:8080/api/v1/ads/request \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": "user-123",
+    "tagId": "tag-homepage-leaderboard",
+    "sizes": [{"w": 728, "h": 90}, {"w": 970, "h": 250}],
+    "bidFloor": 0.5,
+    "secure": true,
+    "interstitial": false,
+    "rewarded": false,
+    "pos": 1,
+    "btype": [4],
+    "battr": [6, 14],
+    "site": {
+      "id": "site-001",
+      "name": "Example News",
+      "domain": "example.com",
+      "page": "https://example.com/article/123",
+      "ref": "https://google.com/search?q=example",
+      "cat": ["IAB12", "IAB12-2"]
+    },
+    "device": {
+      "type": 2, "make": "Apple", "model": "Macintosh",
+      "os": "macOS", "osv": "15.3", "language": "en",
+      "w": 1920, "h": 1080, "dnt": 0, "lmt": 0, "js": 1,
+      "ifa": "6d92078a-8246-4ba4-ae5b-76104861e7dc",
+      "geo": {"lat": 37.7749, "lon": -122.4194, "city": "San Francisco", "accuracy": 50}
+    },
+    "consent": "CPXxRfAPXxRfAAfKABENB-CgAAAAAAAAAAYgAAAAAAAA",
+    "yob": 1990, "gender": "M",
+    "regs": {"gdpr": 0, "coppa": 0, "usPrivacy": "1YNN", "gpp": ""},
+    "tmax": 100,
+    "blockedCategories": ["IAB25", "IAB26"],
+    "blockedAdvertisers": ["blocked-example.com"],
+    "test": true
+  }' | jq .
+```
+
+See `AdRequest.java` for the full SDK-facing contract (impression specs, site/app context, device context, user consent, regulations, auction controls).
 
 Grafana dashboards are available at `http://localhost:3001`.
 
@@ -160,6 +202,13 @@ Start each service with `./gradlew :<service-name>:bootRun` in separate terminal
 ```
 adserve/
 ├── ad-orchestration/       # Main orchestrator service (REST API)
+│   └── src/main/java/io/adserve/orchestration/
+│       ├── openrtb/        # OpenRTB 2.6 typed model (BidRequest, BidResponse, Imp, etc.)
+│       ├── client/         # HTTP clients (partners, ML inference) + typed request/response records
+│       ├── controller/     # AdController, AdRequest (SDK contract), AdResponse
+│       ├── service/        # BidRequestBuilder, AuctionService, BidValidator, NotificationService
+│       ├── config/         # HTTP client and gRPC configuration
+│       └── metrics/        # Prometheus metrics
 ├── user-service/           # Mock gRPC user profile service
 ├── segment-service/        # Mock gRPC segment service
 ├── targeting-service/      # Mock gRPC targeting service
