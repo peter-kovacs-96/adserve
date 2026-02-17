@@ -25,6 +25,15 @@ import java.util.concurrent.Executors;
 public class HttpClientConfig {
 
     @Bean
+    HttpClient notificationHttpClient(HttpClientProperties properties) {
+        var notif = properties.notification();
+        return HttpClient.newBuilder()
+                .connectTimeout(notif.connectTimeout())
+                .executor(Executors.newVirtualThreadPerTaskExecutor())
+                .build();
+    }
+
+    @Bean
     RestClientHttpServiceGroupConfigurer httpServiceGroupConfigurer(HttpClientProperties properties) {
         log.info("HTTP Client config: connectTimeout={}, readTimeout={}",
                 properties.connectTimeout(), properties.readTimeout());

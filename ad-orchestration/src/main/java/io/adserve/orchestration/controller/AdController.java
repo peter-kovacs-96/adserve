@@ -3,9 +3,10 @@ package io.adserve.orchestration.controller;
 import io.adserve.orchestration.client.MlInferenceClient;
 import io.adserve.orchestration.client.MlPredictionRequest;
 import io.adserve.orchestration.client.MlPredictionResponse;
-import io.adserve.orchestration.client.partner.PartnerClientRegistry;
 import io.adserve.orchestration.metrics.AdMetrics;
-import io.adserve.orchestration.openrtb.*;
+import io.adserve.orchestration.service.AuctionResult;
+import io.adserve.orchestration.service.AuctionService;
+import io.adserve.orchestration.service.BidRequestBuilder;
 import io.adserve.segment.grpc.GetSegmentsRequest;
 import io.adserve.segment.grpc.GetSegmentsResponse;
 import io.adserve.segment.grpc.SegmentServiceGrpc;
@@ -15,6 +16,7 @@ import io.adserve.targeting.grpc.TargetingServiceGrpc;
 import io.adserve.user.grpc.GetUserRequest;
 import io.adserve.user.grpc.GetUserResponse;
 import io.adserve.user.grpc.UserServiceGrpc;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -23,9 +25,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.*;
+import java.util.UUID;
 import java.util.concurrent.StructuredTaskScope;
-import java.util.concurrent.StructuredTaskScope.Subtask;
 
 @Slf4j
 @RestController
@@ -36,30 +37,37 @@ public class AdController {
     private final SegmentServiceGrpc.SegmentServiceBlockingStub segmentServiceStub;
     private final TargetingServiceGrpc.TargetingServiceBlockingStub targetingServiceStub;
     private final MlInferenceClient mlInferenceClient;
-    private final PartnerClientRegistry partnerClientRegistry;
     private final AdMetrics adMetrics;
+    private final BidRequestBuilder bidRequestBuilder;
+    private final AuctionService auctionService;
 
     public AdController(
             UserServiceGrpc.UserServiceBlockingStub userServiceStub,
             SegmentServiceGrpc.SegmentServiceBlockingStub segmentServiceStub,
             TargetingServiceGrpc.TargetingServiceBlockingStub targetingServiceStub,
             MlInferenceClient mlInferenceClient,
-            PartnerClientRegistry partnerClientRegistry,
-            AdMetrics adMetrics) {
+            AdMetrics adMetrics,
+            BidRequestBuilder bidRequestBuilder,
+            AuctionService auctionService) {
         this.userServiceStub = userServiceStub;
         this.segmentServiceStub = segmentServiceStub;
         this.targetingServiceStub = targetingServiceStub;
         this.mlInferenceClient = mlInferenceClient;
-        this.partnerClientRegistry = partnerClientRegistry;
         this.adMetrics = adMetrics;
+        this.bidRequestBuilder = bidRequestBuilder;
+        this.auctionService = auctionService;
     }
 
     @PostMapping("/request")
-    public AdResponse requestAd(@RequestBody AdRequest request) {
+    public AdResponse requestAd(@RequestBody AdRequest request, HttpServletRequest httpRequest) {
         var startTime = Instant.now();
         var requestId = UUID.randomUUID().toString();
         var traceId = UUID.randomUUID().toString();
         var userId = request.userId() != null ? request.userId() : "unknown";
+
+        var userAgent = httpRequest.getHeader("User-Agent");
+        var forwarded = httpRequest.getHeader("X-Forwarded-For");
+        var ip = forwarded != null ? forwarded.split(",")[0].trim() : httpRequest.getRemoteAddr();
 
         try (var scope = StructuredTaskScope.open(StructuredTaskScope.Joiner.awaitAllSuccessfulOrThrow())) {
 
@@ -74,8 +82,9 @@ public class AdController {
 
             var mlPrediction = callMlService(userId, traceId, segmentResponse);
 
-            var bidRequest = buildBidRequest(requestId, traceId, userResponse, segmentResponse);
-            var auctionResult = runAuction(bidRequest, traceId);
+            var bidRequest = bidRequestBuilder.build(requestId, traceId, request, userAgent, ip,
+                    userResponse, segmentResponse);
+            var auctionResult = auctionService.runAuction(bidRequest, traceId);
 
             adMetrics.recordAuctionWin(auctionResult.winnerId());
 
@@ -127,83 +136,6 @@ public class AdController {
         return mlInferenceClient.predict(new MlPredictionRequest(userId, traceId, segmentNames));
     }
 
-    private BidRequest buildBidRequest(String requestId, String traceId,
-            GetUserResponse userResp, GetSegmentsResponse segResp) {
-        var user = userResp.getUser();
-        return new BidRequest(
-                requestId,
-                List.of(new Imp("imp-1", new Banner(728, 90, null, null, null, null),
-                        0.0, "USD", 1, null, null, null)),
-                new Site(null, null, null, null, null, null,
-                        new Publisher(null, null, null)),
-                new Device(null,
-                        new Geo(null, null, user.getDemographics().getCountry(),
-                                user.getDemographics().getRegion(), null, 2),
-                        null, null, null, null,
-                        user.getDevice().getOs(), null,
-                        user.getDemographics().getLanguage(),
-                        1, null, null, null, null),
-                new User(user.getUserId(),
-                        List.of(new Data("adserve", "AdServe",
-                                segResp.getSegmentsList().stream()
-                                        .map(s -> new Segment(s.getId(), s.getName(), String.valueOf(s.getScore())))
-                                        .toList())),
-                        null, null, null),
-                new Source(
-                        new Schain(1, List.of(new SchainNode("adserve.io", "direct", 1, requestId)), "1.0"),
-                        traceId),
-                null,
-                1,
-                70,
-                List.of("USD"),
-                null, null
-        );
-    }
-
-    private AuctionResult runAuction(BidRequest bidRequest, String traceId) {
-        var bids = new ArrayList<PartnerBid>();
-        var partnerIds = partnerClientRegistry.getPartnerIds();
-
-        try (var scope = StructuredTaskScope.open(StructuredTaskScope.Joiner.<BidResponse>allSuccessfulOrThrow())) {
-
-            var tasks = new HashMap<String, Subtask<BidResponse>>();
-            for (var partnerId : partnerIds) {
-                tasks.put(partnerId, scope.fork(() ->
-                        partnerClientRegistry.get(partnerId).bid(bidRequest)));
-            }
-
-            try { scope.join(); } catch (Exception e) { /* timeout - continue with partial results */ }
-
-            for (var entry : tasks.entrySet()) {
-                if (entry.getValue().state() == Subtask.State.SUCCESS) {
-                    var bid = extractBid(entry.getKey(), entry.getValue().get());
-                    if (bid != null) bids.add(bid);
-                }
-            }
-        } catch (Exception e) {
-            log.warn("Partner bidding failed | traceId={} | error={}", traceId, e.getMessage());
-        }
-
-        var winner = bids.stream()
-                .max(Comparator.comparingDouble(PartnerBid::price))
-                .orElse(new PartnerBid("none", 0.0, "", ""));
-
-        return new AuctionResult(winner.partnerId(), winner.price(), winner.adId(),
-                winner.creativeUrl(), partnerIds.size(), bids.size());
-    }
-
-    private PartnerBid extractBid(String partnerId, BidResponse response) {
-        if (response.seatbid() == null || response.seatbid().isEmpty()) return null;
-
-        var firstSeat = response.seatbid().getFirst();
-        if (firstSeat.bid() == null || firstSeat.bid().isEmpty()) return null;
-
-        var bid = firstSeat.bid().getFirst();
-        return new PartnerBid(partnerId, bid.price(),
-                bid.adid() != null ? bid.adid() : "",
-                bid.nurl() != null ? bid.nurl() : "");
-    }
-
     private AdResponse buildResponse(
             String requestId, String traceId, long processingTimeMs,
             GetUserResponse userResponse, GetSegmentsResponse segmentResponse,
@@ -226,25 +158,4 @@ public class AdController {
                 new AdResponse.Metadata(3, true, auction.partnersCalled(), auction.bidsReceived())
         );
     }
-
-    // Request/Response records
-    public record AdRequest(String userId, String deviceType, Map<String, Object> context) {}
-
-    public record AdResponse(
-            String requestId, String traceId, String status, long processingTimeMs,
-            Ad ad, User user, List<SegmentInfo> segments, List<TargetingRule> targetingRules,
-            Prediction prediction, Metadata metadata) {
-
-        public record Ad(String partnerId, double bidPrice, String adId, String creativeUrl) {}
-        public record User(String userId, String name, String country, String deviceType) {}
-        public record SegmentInfo(String id, String name, String type, double score) {}
-        public record TargetingRule(String id, String name, int priority, List<String> eligiblePartners) {}
-        public record Prediction(double ctr, double cvr, String modelVersion) {}
-        public record Metadata(int internalServicesCalled, boolean mlServiceCalled, int partnersCalled, int bidsReceived) {}
-    }
-
-    // Internal records
-    record PartnerBid(String partnerId, double price, String adId, String creativeUrl) {}
-    record AuctionResult(String winnerId, double winningPrice, String adId, String creativeUrl,
-                         int partnersCalled, int bidsReceived) {}
 }

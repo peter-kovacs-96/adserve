@@ -9,5 +9,6 @@ public record Geo(
         String country,
         String region,
         String city,
-        Integer type
+        Integer type,
+        Integer accuracy
 ) {}

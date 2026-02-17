@@ -3,12 +3,64 @@
 # Requires: sudo apt install hey
 
 URL="http://localhost:8080/api/v1/ads/request"
-RATE=${1:-1000}       # requests per second (default: 1000)
-DURATION=${2:-5m}     # duration (default: 1 minute)
-CONCURRENCY=${3:-100} # concurrent workers (default: 100)
-WARMUP=${4:-100}      # warm-up requests (default: 100)
+RATE=${1:-200}       # requests per second
+DURATION=${2:-5m}     # duration
+CONCURRENCY=${3:-70} # concurrent workers
+WARMUP=${4:-100}      # warm-up requests
 
-REQUEST_BODY='{"userId":"user-123","deviceType":"mobile","country":"USA"}'
+REQUEST_BODY='{
+  "userId": "user-123",
+  "tagId": "tag-homepage-leaderboard",
+  "sizes": [{"w": 728, "h": 90}, {"w": 970, "h": 250}],
+  "bidFloor": 0.5,
+  "secure": true,
+  "interstitial": false,
+  "rewarded": false,
+  "pos": 1,
+  "btype": [4],
+  "battr": [6, 14],
+  "site": {
+    "id": "site-001",
+    "name": "Example News",
+    "domain": "example.com",
+    "page": "https://example.com/article/123",
+    "ref": "https://google.com/search?q=example",
+    "cat": ["IAB12", "IAB12-2"]
+  },
+  "device": {
+    "type": 2,
+    "make": "Apple",
+    "model": "Macintosh",
+    "os": "macOS",
+    "osv": "15.3",
+    "language": "en",
+    "w": 1920,
+    "h": 1080,
+    "dnt": 0,
+    "lmt": 0,
+    "js": 1,
+    "ifa": "6d92078a-8246-4ba4-ae5b-76104861e7dc",
+    "geo": {
+      "lat": 37.7749,
+      "lon": -122.4194,
+      "city": "San Francisco",
+      "accuracy": 50
+    }
+  },
+  "consent": "CPXxRfAPXxRfAAfKABENB-CgAAAAAAAAAAYgAAAAAAAA",
+  "yob": 1990,
+  "gender": "M",
+  "regs": {
+    "gdpr": 0,
+    "coppa": 0,
+    "usPrivacy": "1YNN",
+    "gpp": ""
+  },
+  "tmax": 100,
+  "blockedCategories": ["IAB25", "IAB26"],
+  "blockedAdvertisers": ["blocked-example.com"],
+  "test": true
+}'
 
 echo "=== AdServe Load Test ==="
 echo "  URL: $URL"

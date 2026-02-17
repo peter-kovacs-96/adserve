@@ -9,6 +9,7 @@ public record BidRequest(
         String id,
         List<Imp> imp,
         Site site,
+        App app,
         Device device,
         User user,
         Source source,
@@ -17,5 +18,6 @@ public record BidRequest(
         Integer tmax,
         List<String> cur,
         List<String> bcat,
-        List<String> badv
+        List<String> badv,
+        Integer test
 ) {}
